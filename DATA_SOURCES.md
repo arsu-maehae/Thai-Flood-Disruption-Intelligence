@@ -83,11 +83,29 @@ The documentation declares JSON media types but provides no successful-response 
 |---|---|
 | Geographic scope requested | Pattani Province |
 | Request value used | `pv_idn=94` |
-| Exploratory request | A request with `limit=10` completed successfully and returned 10 records |
+| Exploratory request | HTTP `200`; content type `application/geo+json`; 10 features returned |
 | Response structure | GeoJSON `FeatureCollection` was observed |
+| Returned counts | `numberReturned=10`; `numberMatched=112073` |
 | Geometry type | `MultiPolygon` was observed |
+| Link relations | `self`, `alternate`, and `next` were observed |
+| Credential echo | Successful response `links[].href` values contained an `api_key` query parameter |
+| Exploratory artifact disposition | The first 10-record artifact was deleted after the echoed credential was discovered, and the credential was rotated again; the deleted sample is not a retained source artifact |
 
-These observations establish only what was seen in the earlier test. They do not establish an officially documented response contract, geometry contract, CRS, field meaning, pagination rule, or official mapping of `pv_idn=94` to Pattani.
+These observations establish only what was seen in the earlier test. They do not establish an officially documented response or link contract, geometry contract, CRS, field meaning, pagination rule, count semantic, or official mapping of `pv_idn=94` to Pattani.
+
+### Credential-sanitized source contract
+
+An active credential must never be persisted. For GISTDA flood-frequency ingestion:
+
+- The original provider response exists only in memory.
+- Its SHA-256 and byte count are recorded for provenance.
+- Credential-named JSON fields and credential-bearing link query parameters are removed.
+- The sanitized JSON is serialized deterministically and stored with a `.sanitized.json` suffix.
+- The stored artifact's SHA-256 and byte count are recorded separately.
+- The original response body is not persisted.
+- Files stored under `data/raw/` for this source are sanitized source-layer artifacts, not untouched provider responses.
+
+Sanitized source artifacts and their metadata are immutable and must never be overwritten. Their metadata must preserve retrieval context and lineage while excluding credential values, full response links, request headers, and original response bytes.
 
 ### Not yet verified
 

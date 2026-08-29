@@ -7,9 +7,9 @@ Phase one focuses exclusively on ingesting GISTDA historical flood data for Patt
 This phase will provide the foundation for a reliable flood-data pipeline:
 
 - Download GISTDA historical flood responses using only verified request behavior.
-- Preserve source responses immutably in `data/raw/`; existing raw artifacts must never be overwritten.
+- Preserve credential-sanitized source artifacts immutably in `data/raw/`; existing artifacts must never be overwritten.
 - Validate officially documented behavior separately from structure observed in prior API tests.
-- Derive processed data reproducibly from identified raw artifacts in `data/processed/`.
+- Derive processed data reproducibly from identified sanitized source artifacts in `data/processed/`.
 - Add focused tests for ingestion, validation, and transformation.
 
 Machine learning, dashboards, databases, population, roads, hospitals, schools, and derived features are out of scope for this phase.
@@ -18,12 +18,12 @@ Machine learning, dashboards, databases, population, roads, hospitals, schools, 
 
 ```text
 src/
-  ingestion/       GISTDA access and raw-data persistence
+  ingestion/       GISTDA access and sanitized source persistence
   validation/      Input structure and quality checks
   transformation/  Conversion to the processed project format
   features/        Reserved for a later phase
 data/
-  raw/             Untouched source responses
+  raw/             Immutable, credential-sanitized source-layer artifacts
   processed/       Validated and transformed flood data
   features/        Reserved for a later phase
 tests/             Unit and pipeline tests
@@ -42,6 +42,12 @@ The pipeline will use only officially documented behavior or explicitly scoped o
 Live API requests require explicit user approval. Any API key previously exposed must be treated as compromised and replaced with a rotated key before a live request is made.
 
 Configuration values belong in a local `.env` file. Start from `.env.example` and never commit credentials.
+
+## Source Artifact Security and Provenance
+
+GISTDA response links were previously observed echoing an active credential in an `api_key` query parameter. This is observed behavior, not an official response contract, and an active credential must never be persisted.
+
+For this source, the original response exists only in memory. The ingestion workflow records its SHA-256 and byte count, removes credential-named fields and link query parameters, and deterministically serializes a `.sanitized.json` source artifact. The stored artifact has a separate SHA-256 and byte count, and the original response body is not persisted. Files under `data/raw/` for this source are therefore sanitized source-layer artifacts, not untouched provider responses. Stored artifacts remain immutable and retain explicit lineage to their retrieval metadata.
 
 ## Development
 

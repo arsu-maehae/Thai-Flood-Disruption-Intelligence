@@ -8,7 +8,11 @@ from .gistda_client import (
     GistdaResponse,
     GistdaTimeoutError,
 )
-from .flood_frequency import RawIngestionResult, ingest_pattani_sample
+from .flood_frequency import (
+    SourceIngestionResult,
+    SourceSanitizationError,
+    ingest_pattani_sample,
+)
 
 __all__ = [
     "GistdaClient",
@@ -17,6 +21,7 @@ __all__ = [
     "GistdaHTTPError",
     "GistdaResponse",
     "GistdaTimeoutError",
-    "RawIngestionResult",
+    "SourceIngestionResult",
+    "SourceSanitizationError",
     "ingest_pattani_sample",
 ]
