@@ -93,6 +93,20 @@ The documentation declares JSON media types but provides no successful-response 
 
 These observations establish only what was seen in the earlier test. They do not establish an officially documented response or link contract, geometry contract, CRS, field meaning, pagination rule, count semantic, or official mapping of `pv_idn=94` to Pattani.
 
+#### Milestone 7 controlled pagination probe
+
+Verified on **2026-08-29 UTC** as **Previously observed** behavior:
+
+- Three controlled requests used `pv_idn=94`, `limit=10`, and offsets `0`, `10`, and `112070`; returned feature counts were `10`, `10`, and `3`.
+- `numberMatched=112073` was present and consistent across all three responses.
+- All observed feature IDs were non-empty strings and unique within each page. No ID overlap was observed between offsets `0` and `10`.
+- The current offset-0 feature-ID order matched the earlier safe sample, but this does not establish stable ordering.
+- Observed next offsets were `10` and `20`. The tail response was partial, had no `next` relation, and satisfied `112070 + 3 = 112073`.
+- Link relations observed across the probe included `self`, `alternate`, `next`, and `prev`.
+- All persisted artifacts were credential-sanitized and passed integrity verification.
+
+These findings are observations, not official pagination guarantees. Stable ordering, snapshot consistency, count semantics, and termination behavior remain **Not yet verified** as a general contract. Response links must never be followed as trusted request instructions.
+
 ### Credential-sanitized source contract
 
 An active credential must never be persisted. For GISTDA flood-frequency ingestion:
