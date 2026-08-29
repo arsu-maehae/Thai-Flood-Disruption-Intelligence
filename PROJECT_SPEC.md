@@ -77,21 +77,21 @@ The project is not intended to replace official emergency or disaster-management
 
 ---
 
-## 6. Initial Geographic Scope
+## 6. Current Geographic Scope
 
-### MVP
+### Current Phase 1
 
-The initial implementation will focus on:
+The current operational implementation focuses on:
 
-> Pathum Thani, Thailand
+> Pattani, Thailand
 
-The purpose of limiting the geographic scope is to make the first version manageable while still providing enough geographic and infrastructure complexity for meaningful analysis.
+Current Phase 1 is limited to building a reliable ingestion pipeline for GISTDA Historical Flood Recurrence data. Infrastructure exposure, disruption scoring, machine learning, APIs, dashboards, and production orchestration remain part of the long-term roadmap rather than the current acceptance criteria.
 
 ### Future Expansion
 
-After the MVP is validated:
+After the Pattani ingestion pipeline and later analytical stages are validated:
 
-1. Bangkok + Pathum Thani
+1. Additional selected provinces, including Pathum Thani and Bangkok
 2. Additional provinces
 3. Nationwide Thailand
 
@@ -538,7 +538,9 @@ The ML model must be compared against the rule-based baseline.
 
 ---
 
-## 20. MVP Definition
+## 20. Long-Term MVP Definition
+
+The criteria in this section describe the broader disruption-intelligence MVP. They are not the acceptance criteria for the current operational Phase 1.
 
 The MVP is considered complete when the system can:
 
@@ -556,6 +558,8 @@ Machine learning, Airflow, dbt, FastAPI, and Docker can initially be implemented
 ---
 
 ## 21. Development Phases
+
+The phases below are the long-term development roadmap. For the current implementation, "Phase 1" refers specifically to the Pattani GISTDA Historical Flood Recurrence ingestion pipeline described in Section 6 and the repository README. The broader roadmap is preserved for future development.
 
 ### Phase 0 — Specification
 
