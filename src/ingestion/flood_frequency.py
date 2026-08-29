@@ -34,6 +34,10 @@ class SourceSanitizationError(ValueError):
     """Raised when a response cannot be safely prepared for persistence."""
 
 
+class SourcePageStructureError(ValueError):
+    """Raised when observed page structure is unsafe for pagination."""
+
+
 @dataclass(frozen=True)
 class SourceIngestionResult:
     """Paths and integrity data for one sanitized source artifact."""
@@ -41,6 +45,12 @@ class SourceIngestionResult:
     artifact_path: Path
     metadata_path: Path
     stored_artifact_sha256: str
+    page_content_sha256: str
+    number_returned: int
+    number_matched: int | None
+    number_matched_present: bool
+    feature_ids: tuple[str, ...]
+    missing_feature_id_count: int
     created: bool
 
 
@@ -58,18 +68,40 @@ def ingest_pattani_sample(
     output_root: str | Path,
     retrieved_at: datetime | None = None,
 ) -> SourceIngestionResult:
-    """Retrieve and persist one credential-sanitized Pattani sample response."""
+    """Controlled wrapper for the observed ten-record Pattani sample."""
+
+    return ingest_pattani_page(
+        config=config,
+        client=client,
+        output_root=output_root,
+        limit=SAMPLE_LIMIT,
+        offset=SAMPLE_OFFSET,
+        retrieved_at=retrieved_at,
+    )
+
+
+def ingest_pattani_page(
+    *,
+    config: GistdaConfig,
+    client: GistdaClient,
+    output_root: str | Path,
+    limit: int,
+    offset: int,
+    retrieved_at: datetime | None = None,
+) -> SourceIngestionResult:
+    """Retrieve and persist one explicit credential-sanitized Pattani page."""
 
     if config.province_id != PATTANI_PROVINCE_ID:
         raise ValueError("configured province ID does not match project Pattani scope")
+    _validate_page_request(limit, offset)
 
     timestamp = (
         _normalize_timestamp(retrieved_at) if retrieved_at is not None else None
     )
     response = client.get_flood_frequency(
         pv_idn=config.province_id,
-        limit=SAMPLE_LIMIT,
-        offset=SAMPLE_OFFSET,
+        limit=limit,
+        offset=offset,
     )
     if timestamp is None:
         timestamp = _normalize_timestamp(_utc_now())
@@ -80,13 +112,21 @@ def ingest_pattani_sample(
     sanitized_payload, report = _sanitize_response(original_bytes)
     stored_bytes = _serialize_sanitized(sanitized_payload)
     _verify_sanitized(sanitized_payload, stored_bytes, config.api_key)
+    (
+        number_returned,
+        number_matched,
+        number_matched_present,
+        feature_ids,
+        missing_feature_id_count,
+        page_content_sha256,
+    ) = _validate_page_structure(sanitized_payload)
     stored_digest = hashlib.sha256(stored_bytes).hexdigest()
 
     timestamp_text = timestamp.strftime("%Y%m%dT%H%M%S%fZ")
     safe_province_id = _filesystem_safe(config.province_id)
     stem = (
         f"{timestamp_text}__pv_idn-{safe_province_id}"
-        f"__limit-{SAMPLE_LIMIT}__offset-{SAMPLE_OFFSET}"
+        f"__limit-{limit}__offset-{offset}"
         f"__sha256-{stored_digest[:12]}"
     )
 
@@ -116,9 +156,13 @@ def ingest_pattani_sample(
         "endpoint_path": FLOOD_FREQUENCY_PATH,
         "request_parameters": {
             "pv_idn": config.province_id,
-            "limit": SAMPLE_LIMIT,
-            "offset": SAMPLE_OFFSET,
+            "limit": limit,
+            "offset": offset,
         },
+        "observed_number_returned": number_returned,
+        "observed_number_matched": number_matched,
+        "observed_number_matched_present": number_matched_present,
+        "top_level_feature_id_check_complete": missing_feature_id_count == 0,
         "http_status": response.status_code,
         "content_type": response.content_type,
         "original_response_persisted": False,
@@ -140,6 +184,12 @@ def ingest_pattani_sample(
                 artifact_path,
                 metadata_path,
                 stored_digest,
+                page_content_sha256,
+                number_returned,
+                number_matched,
+                number_matched_present,
+                feature_ids,
+                missing_feature_id_count,
                 created=False,
             )
         raise FileExistsError("source ingestion destination already exists")
@@ -155,7 +205,82 @@ def ingest_pattani_sample(
         artifact_path,
         metadata_path,
         stored_digest,
+        page_content_sha256,
+        number_returned,
+        number_matched,
+        number_matched_present,
+        feature_ids,
+        missing_feature_id_count,
         created=True,
+    )
+
+
+def _validate_page_request(limit: int, offset: int) -> None:
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 10000:
+        raise ValueError("limit must be an integer from 1 through 10000")
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        raise ValueError("offset must be a non-negative integer")
+
+
+def _validate_page_structure(
+    payload: Any,
+) -> tuple[int, int | None, bool, tuple[str, ...], int, str]:
+    if not isinstance(payload, dict):
+        raise SourcePageStructureError("source page must be a JSON object")
+    features = payload.get("features")
+    if not isinstance(features, list):
+        raise SourcePageStructureError("source page features must be a list")
+
+    number_returned = payload.get("numberReturned")
+    if (
+        isinstance(number_returned, bool)
+        or not isinstance(number_returned, int)
+        or number_returned < 0
+    ):
+        raise SourcePageStructureError(
+            "source page numberReturned must be a non-negative integer"
+        )
+    if number_returned != len(features):
+        raise SourcePageStructureError(
+            "source page numberReturned does not match feature count"
+        )
+
+    number_matched_present = "numberMatched" in payload
+    number_matched = payload.get("numberMatched")
+    if number_matched_present:
+        if (
+            isinstance(number_matched, bool)
+            or not isinstance(number_matched, int)
+            or number_matched < 0
+        ):
+            raise SourcePageStructureError(
+                "source page numberMatched must be a non-negative integer when present"
+            )
+
+    feature_ids: list[str] = []
+    missing_feature_id_count = 0
+    for feature in features:
+        if not isinstance(feature, dict):
+            raise SourcePageStructureError("every source feature must be a JSON object")
+        feature_id = feature.get("id")
+        if not isinstance(feature_id, str) or feature_id == "":
+            missing_feature_id_count += 1
+            continue
+        feature_ids.append(feature_id)
+
+    page_content = json.dumps(
+        features,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return (
+        number_returned,
+        number_matched,
+        number_matched_present,
+        tuple(feature_ids),
+        missing_feature_id_count,
+        hashlib.sha256(page_content).hexdigest(),
     )
 
 

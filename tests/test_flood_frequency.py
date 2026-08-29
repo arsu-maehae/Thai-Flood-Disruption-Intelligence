@@ -53,6 +53,8 @@ def synthetic_response_bytes() -> bytes:
         "api_key": "direct-secret",
         "nested": {"API-Key": "nested-secret", "safe": "preserved"},
         "features": [],
+        "numberReturned": 0,
+        "numberMatched": 0,
     }
     return json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
