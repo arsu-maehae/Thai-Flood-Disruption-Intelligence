@@ -11,13 +11,394 @@ import pytest
 import requests
 
 from src.ingestion import run_manifest
-from src.ingestion.run_manifest import PageJournalRecord, RunJournal, RunJournalError
+from src.ingestion.run_manifest import (
+    PageJournalRecord, RunCounts, RunJournal, RunJournalError, UnjournaledPageReference,
+)
 
 
 DUMMY_KEY = "dummy-journal-secret"
 STARTED = datetime(2026, 8, 29, 1, 2, 3, tzinfo=timezone.utc)
 FINISHED = STARTED + timedelta(minutes=2)
 DIGEST = "a" * 64
+
+
+def coordinated_start(tmp_path: Path) -> RunJournal:
+    return RunJournal.start(
+        output_root=tmp_path, run_id="coordinated", expected_offsets=(0, 10),
+        started_at=STARTED, api_key=DUMMY_KEY, counts=RunCounts(0, 0, 0, 0),
+    )
+
+
+def assert_record_counts(path: Path, counts: RunCounts) -> None:
+    record = read(path)
+    assert {key: record[key] for key in counts.to_dict()} == counts.to_dict()
+    assert record["request_count"] == counts.attempted_request_count
+    assert record["journal_schema_version"] == "1.2"
+
+
+def test_coordinated_counts_follow_published_records(tmp_path):
+    journal = coordinated_start(tmp_path)
+    assert journal.counts == RunCounts(0, 0, 0, 0)
+    assert_record_counts(journal.run_directory / "run_started.json", journal.counts)
+    first = journal.append_page(page(tmp_path), counts=RunCounts(1, 1, 1, 1))
+    assert journal.counts == RunCounts(1, 1, 1, 1)
+    assert_record_counts(first, journal.counts)
+    second = journal.append_page(page(tmp_path, 1, 10), counts=RunCounts(2, 2, 2, 2))
+    assert_record_counts(second, journal.counts)
+    terminal = journal.complete(
+        completed_at=FINISHED, stop_reason="partial_page", observed_number_matched=13,
+        duplicate_id_check_complete=True, counts=RunCounts(2, 2, 2, 2),
+    )
+    assert journal.counts == RunCounts(2, 2, 2, 2)
+    assert journal.page_count == 2 and journal.status == "complete"
+    assert_record_counts(terminal, journal.counts)
+    with pytest.raises(AttributeError):
+        journal.counts = RunCounts(0, 0, 0, 0)
+
+
+@pytest.mark.parametrize("values", [
+    (True, 0, 0, 0), (1, True, 0, 0), (1, 1, True, 0), (1, 1, 1, True),
+    (-1, 0, 0, 0), (None, 0, 0, 0), (1, None, 0, 0),
+    (0, 1, 0, 0), (1, 0, 1, 0), (1, 1, 0, 1),
+    (DUMMY_KEY, 0, 0, 0), (1.0, 0, 0, 0),
+])
+def test_invalid_run_counts_are_safe(values):
+    with pytest.raises(ValueError) as caught:
+        RunCounts(*values)
+    assert DUMMY_KEY not in str(caught.value) + repr(caught.value)
+
+
+@pytest.mark.parametrize("counts", [RunCounts(1, 0, 0, 0), RunCounts(None, None, None, 0)])
+def test_coordinated_start_requires_zero_known_counts(tmp_path, counts):
+    with pytest.raises(ValueError):
+        RunJournal.start(output_root=tmp_path, run_id="invalid", expected_offsets=(0,),
+                         started_at=STARTED, api_key=DUMMY_KEY, counts=counts)
+    assert not (tmp_path / run_manifest.RUNS_SUBDIRECTORY).exists()
+
+
+def test_standalone_counts_remain_unknown_and_cannot_switch(tmp_path):
+    journal = start(tmp_path)
+    assert journal.counts == RunCounts(None, None, None, 0)
+    with pytest.raises(ValueError, match="mode"):
+        journal.append_page(page(tmp_path), counts=RunCounts(1, 1, 1, 1))
+    assert journal.counts == RunCounts(None, None, None, 0)
+    path = journal.append_page(page(tmp_path))
+    assert_record_counts(path, RunCounts(None, None, None, 1))
+    with pytest.raises(ValueError, match="mode"):
+        journal.fail(failed_at=FINISHED, failure_category="request_timeout",
+                     counts=RunCounts(2, 1, 1, 1))
+    path = journal.fail(failed_at=FINISHED, failure_category="request_timeout")
+    assert_record_counts(path, RunCounts(None, None, None, 1))
+
+
+@pytest.mark.parametrize("counts", [None, RunCounts(None, None, None, 1),
+                                    RunCounts(2, 1, 1, 1), RunCounts(1, 1, 1, 0)])
+def test_rejected_page_snapshot_does_not_advance_counts(tmp_path, counts):
+    journal = coordinated_start(tmp_path)
+    with pytest.raises(ValueError):
+        journal.append_page(page(tmp_path), counts=counts)
+    assert journal.counts == RunCounts(0, 0, 0, 0) and journal.page_count == 0
+    assert {p.name for p in journal.run_directory.iterdir()} == {"run_started.json"}
+
+
+def test_pre_link_failure_does_not_advance_counts(tmp_path, monkeypatch):
+    journal = coordinated_start(tmp_path)
+    def refuse_link(*args):
+        raise OSError(DUMMY_KEY)
+    monkeypatch.setattr(run_manifest.os, "link", refuse_link)
+    with pytest.raises(RunJournalError) as caught:
+        journal.append_page(page(tmp_path), counts=RunCounts(1, 1, 1, 1))
+    assert not caught.value.record_published
+    assert journal.counts == RunCounts(0, 0, 0, 0) and journal.page_count == 0
+    assert not list(journal.run_directory.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("kind", ["page", "complete", "failed"])
+def test_coordinated_cleanup_fault_updates_all_published_state(tmp_path, monkeypatch, kind):
+    journal = coordinated_start(tmp_path)
+    if kind == "complete":
+        journal.append_page(replace(page(tmp_path), number_returned=3),
+                            counts=RunCounts(1, 1, 1, 1))
+    expected = RunCounts(1, 1, 1, 1) if kind != "failed" else RunCounts(1, 0, 0, 0)
+    real_remove = run_manifest._remove_temp
+    monkeypatch.setattr(run_manifest, "_remove_temp", lambda path: False)
+    with pytest.raises(RunJournalError) as caught:
+        if kind == "page":
+            journal.append_page(page(tmp_path), counts=expected)
+        elif kind == "complete":
+            journal.complete(completed_at=FINISHED, stop_reason="partial_page",
+                             observed_number_matched=13, duplicate_id_check_complete=True,
+                             counts=expected)
+        else:
+            journal.fail(failed_at=FINISHED, failure_category="request_timeout", counts=expected)
+    assert caught.value.record_published and caught.value.cleanup_failed
+    assert journal.counts == expected and journal.page_count == expected.journaled_page_count
+    assert journal.is_terminal == (kind != "page")
+    assert journal.status == (kind if kind != "page" else "started")
+    assert journal.cleanup_failed
+    destination = journal.run_directory / ("page_000000.json" if kind == "page" else f"run_{kind}.json")
+    assert_record_counts(destination, expected)
+    with pytest.raises(RunJournalError):
+        journal.fail(failed_at=FINISHED, failure_category="request_timeout", counts=expected)
+    monkeypatch.setattr(run_manifest, "_remove_temp", real_remove)
+    for temporary in journal.run_directory.glob("*.tmp"):
+        assert real_remove(str(temporary))
+
+
+@pytest.mark.parametrize("counts", [RunCounts(3, 1, 1, 1), RunCounts(2, 2, 2, 2),
+                                    RunCounts(None, None, None, 1)])
+def test_failure_snapshot_rejection_preserves_latest_counts(tmp_path, counts):
+    journal = coordinated_start(tmp_path)
+    journal.append_page(page(tmp_path), counts=RunCounts(1, 1, 1, 1))
+    with pytest.raises(ValueError):
+        journal.fail(failed_at=FINISHED, failure_category="request_timeout", counts=counts)
+    assert journal.counts == RunCounts(1, 1, 1, 1) and not journal.is_terminal
+    assert not (journal.run_directory / "run_failed.json").exists()
+
+
+@pytest.mark.parametrize("kind", ["complete", "failed"])
+def test_terminal_pre_link_failure_preserves_latest_counts(tmp_path, monkeypatch, kind):
+    journal = coordinated_start(tmp_path)
+    journal.append_page(replace(page(tmp_path), number_returned=3), counts=RunCounts(1, 1, 1, 1))
+    def refuse_link(*args):
+        raise OSError(DUMMY_KEY)
+    monkeypatch.setattr(run_manifest.os, "link", refuse_link)
+    with pytest.raises(RunJournalError):
+        if kind == "complete":
+            journal.complete(completed_at=FINISHED, stop_reason="partial_page",
+                             observed_number_matched=13, duplicate_id_check_complete=True,
+                             counts=RunCounts(1, 1, 1, 1))
+        else:
+            journal.fail(failed_at=FINISHED, failure_category="request_timeout",
+                         counts=RunCounts(2, 1, 1, 1))
+    assert journal.counts == RunCounts(1, 1, 1, 1) and not journal.is_terminal
+    assert not (journal.run_directory / f"run_{kind}.json").exists()
+
+
+def test_completion_snapshot_rejection_does_not_advance_state(tmp_path):
+    journal = coordinated_start(tmp_path)
+    journal.append_page(replace(page(tmp_path), number_returned=3), counts=RunCounts(1, 1, 1, 1))
+    with pytest.raises(ValueError):
+        journal.complete(completed_at=FINISHED, stop_reason="partial_page",
+                         observed_number_matched=13, duplicate_id_check_complete=True,
+                         counts=RunCounts(2, 1, 1, 1))
+    assert journal.counts == RunCounts(1, 1, 1, 1) and not journal.is_terminal
+    assert not (journal.run_directory / "run_complete.json").exists()
+
+
+def test_old_schema_directory_is_never_rewritten(tmp_path):
+    directory = tmp_path / run_manifest.RUNS_SUBDIRECTORY / "old"
+    directory.mkdir(parents=True)
+    old = directory / "run_started.json"
+    original = b'{"journal_schema_version":"1.1"}\n'
+    old.write_bytes(original)
+    with pytest.raises(FileExistsError):
+        RunJournal.start(output_root=tmp_path, run_id="old", expected_offsets=(0,),
+                         started_at=STARTED, api_key=DUMMY_KEY, counts=RunCounts(0, 0, 0, 0))
+    assert old.read_bytes() == original and list(directory.iterdir()) == [old]
+
+
+def lineage(tmp_path, *, stage="persisted_unvalidated", record=None):
+    return UnjournaledPageReference.from_page(
+        record=record if record is not None else page(tmp_path), outcome_stage=stage,
+        output_root=tmp_path, api_key=DUMMY_KEY,
+    )
+
+
+@pytest.mark.parametrize("validated", [False, True])
+def test_coordinated_failure_stores_safe_immutable_lineage(tmp_path, validated):
+    journal = coordinated_start(tmp_path)
+    reference = lineage(tmp_path, stage="validated_unjournaled" if validated else "persisted_unvalidated")
+    counts = RunCounts(1, 1, int(validated), 0)
+    terminal = journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                            counts=counts, unjournaled_page=reference)
+    stored = read(terminal)
+    assert stored["unjournaled_page"] == reference.to_dict()
+    assert stored["journal_schema_version"] == "1.2"
+    assert journal.counts == counts and journal.page_count == 0 and journal.status == "failed"
+    assert set(reference.to_dict()) == {
+        "outcome_stage", "requested_offset", "requested_limit", "relative_artifact_path",
+        "relative_metadata_path", "stored_artifact_sha256", "number_returned",
+        "number_matched_present", "number_matched", "feature_id_check_complete",
+    }
+    assert not Path(reference.relative_artifact_path).is_absolute()
+    assert repr(reference) == "UnjournaledPageReference()"
+    assert DUMMY_KEY.encode() not in terminal.read_bytes()
+    with pytest.raises(AttributeError):
+        reference.outcome_stage = "other"
+    before = terminal.read_bytes()
+    with pytest.raises(RunJournalError):
+        journal.fail(failed_at=FINISHED, failure_category="second_failure",
+                     counts=counts, unjournaled_page=reference)
+    assert terminal.read_bytes() == before
+
+
+@pytest.mark.parametrize("counts,stage", [
+    (RunCounts(0, 0, 0, 0), "persisted_unvalidated"),
+    (RunCounts(1, 0, 0, 0), "persisted_unvalidated"),
+    (RunCounts(1, 1, 0, 0), None),
+    (RunCounts(1, 1, 1, 0), None),
+    (RunCounts(1, 1, 0, 0), "validated_unjournaled"),
+    (RunCounts(1, 1, 1, 0), "persisted_unvalidated"),
+    (RunCounts(2, 2, 1, 0), "persisted_unvalidated"),
+])
+def test_inconsistent_lineage_counts_publish_nothing(tmp_path, counts, stage):
+    journal = coordinated_start(tmp_path)
+    reference = lineage(tmp_path, stage=stage) if stage is not None else None
+    with pytest.raises(ValueError) as caught:
+        journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                     counts=counts, unjournaled_page=reference)
+    assert DUMMY_KEY not in str(caught.value) + repr(caught.value)
+    assert journal.counts == RunCounts(0, 0, 0, 0) and not journal.is_terminal
+    assert {p.name for p in journal.run_directory.iterdir()} == {"run_started.json"}
+
+
+def test_standalone_failure_rejects_lineage_without_changing_state(tmp_path):
+    journal = start(tmp_path)
+    with pytest.raises(ValueError, match="standalone"):
+        journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                     unjournaled_page=lineage(tmp_path))
+    assert journal.counts == RunCounts(None, None, None, 0) and not journal.is_terminal
+    assert not list(journal.run_directory.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("field,value", [
+    ("outcome_stage", "not-a-stage"), ("outcome_stage", []),
+    ("requested_offset", True), ("requested_limit", 0), ("requested_limit", 10001),
+    ("number_returned", -1), ("number_returned", True),
+    ("number_matched_present", 1), ("number_matched", True),
+    ("feature_id_check_complete", "yes"), ("stored_artifact_sha256", DUMMY_KEY),
+    ("relative_artifact_path", "../external.json"), ("relative_metadata_path", "/external.json"),
+    ("relative_artifact_path", "C:/external.json"), ("relative_metadata_path", "\\external.json"),
+    ("relative_artifact_path", ""),
+])
+def test_invalid_lineage_fields_are_rejected_safely(tmp_path, field, value):
+    with pytest.raises(ValueError) as caught:
+        replace(lineage(tmp_path), **{field: value})
+    assert DUMMY_KEY not in str(caught.value) + repr(caught.value)
+
+
+def test_lineage_factory_rejects_external_paths(tmp_path):
+    with pytest.raises(ValueError, match="beneath"):
+        lineage(tmp_path, record=replace(page(tmp_path), artifact_path=tmp_path.parent / "external.json"))
+
+
+@pytest.mark.parametrize("unsafe", [
+    "dummy-journal-secret.sanitized.json",
+    "%2564ummy-journal-secret.sanitized.json",
+    "artifact.json?API-Key=offending-value",
+    "artifact.json?%2541uthorization=offending-value",
+])
+def test_lineage_credentials_are_rejected_before_terminal_publication(tmp_path, unsafe):
+    journal = coordinated_start(tmp_path)
+    reference = replace(lineage(tmp_path), relative_artifact_path=unsafe)
+    with pytest.raises((RunJournalError, ValueError)) as caught:
+        journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                     counts=RunCounts(1, 1, 0, 0), unjournaled_page=reference)
+    assert DUMMY_KEY not in str(caught.value) + repr(caught.value) + repr(reference)
+    assert unsafe not in str(caught.value) + repr(caught.value) + repr(reference)
+    assert not (journal.run_directory / "run_failed.json").exists()
+    assert not list(journal.run_directory.glob("*.tmp"))
+    assert journal.counts == RunCounts(0, 0, 0, 0) and not journal.is_terminal
+
+
+@pytest.mark.parametrize("field", ["API-Key", "%2561pi_key", "%2541uthorization"])
+def test_lineage_serialization_uses_existing_credential_field_checks(tmp_path, monkeypatch, field):
+    journal = coordinated_start(tmp_path)
+    reference = lineage(tmp_path)
+    original = UnjournaledPageReference.to_dict
+    monkeypatch.setattr(UnjournaledPageReference, "to_dict",
+                        lambda self: original(self) | {field: DUMMY_KEY})
+    with pytest.raises(RunJournalError) as caught:
+        journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                     counts=RunCounts(1, 1, 0, 0), unjournaled_page=reference)
+    assert DUMMY_KEY not in str(caught.value) + repr(caught.value) + repr(reference)
+    assert field not in str(caught.value) + repr(caught.value)
+    assert not (journal.run_directory / "run_failed.json").exists()
+    assert journal.counts == RunCounts(0, 0, 0, 0)
+
+
+def test_unvalidated_lineage_preserves_observed_validation_failure_fields(tmp_path):
+    journal = coordinated_start(tmp_path)
+    journal.append_page(page(tmp_path), counts=RunCounts(1, 1, 1, 1))
+    record = replace(page(tmp_path, 1, 10), number_returned=11, number_matched=99,
+                     feature_id_check_complete=False)
+    reference = lineage(tmp_path, record=record)
+    terminal = journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                            counts=RunCounts(2, 2, 1, 1), unjournaled_page=reference)
+    assert read(terminal)["unjournaled_page"] == reference.to_dict()
+    assert reference.number_returned == 11 and reference.number_matched == 99
+
+
+@pytest.mark.parametrize("mismatch", ["offset", "count", "number_matched"])
+def test_validated_lineage_reconciles_sequence_and_observations(tmp_path, mismatch):
+    journal = coordinated_start(tmp_path)
+    journal.append_page(page(tmp_path), counts=RunCounts(1, 1, 1, 1))
+    record = page(tmp_path, 1, 10)
+    changes = {"offset": {"requested_offset": 11}, "count": {"number_returned": 11},
+               "number_matched": {"number_matched": 99}}[mismatch]
+    reference = lineage(tmp_path, stage="validated_unjournaled", record=replace(record, **changes))
+    with pytest.raises(ValueError):
+        journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                     counts=RunCounts(2, 2, 2, 1), unjournaled_page=reference)
+    assert journal.counts == RunCounts(1, 1, 1, 1) and not journal.is_terminal
+
+
+@pytest.mark.parametrize("cleanup_fault", [False, True])
+def test_lineage_terminal_publication_state_is_immutable(tmp_path, monkeypatch, cleanup_fault):
+    journal = coordinated_start(tmp_path)
+    reference = lineage(tmp_path)
+    counts = RunCounts(1, 1, 0, 0)
+    original_remove = run_manifest._remove_temp
+    if cleanup_fault:
+        monkeypatch.setattr(run_manifest, "_remove_temp", lambda path: False)
+        with pytest.raises(RunJournalError) as caught:
+            journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                         counts=counts, unjournaled_page=reference)
+        assert caught.value.record_published and caught.value.cleanup_failed
+    else:
+        journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                     counts=counts, unjournaled_page=reference)
+    assert journal.counts == counts and journal.is_terminal and journal.status == "failed"
+    terminal = journal.run_directory / "run_failed.json"
+    assert read(terminal)["unjournaled_page"] == reference.to_dict()
+    monkeypatch.setattr(run_manifest, "_remove_temp", original_remove)
+    for temporary in journal.run_directory.glob("*.tmp"):
+        assert original_remove(str(temporary))
+
+
+def test_lineage_paths_are_rechecked_for_resolved_escape(tmp_path, monkeypatch):
+    journal = coordinated_start(tmp_path)
+    reference = lineage(tmp_path)
+    escaped_path = tmp_path / reference.relative_artifact_path
+    original_resolve = Path.resolve
+    def resolve(path, *args, **kwargs):
+        if path == escaped_path:
+            return tmp_path.parent / "external-artifact.json"
+        return original_resolve(path, *args, **kwargs)
+    monkeypatch.setattr(Path, "resolve", resolve)
+    with pytest.raises(ValueError, match="beneath"):
+        journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                     counts=RunCounts(1, 1, 0, 0), unjournaled_page=reference)
+    assert journal.counts == RunCounts(0, 0, 0, 0) and not journal.is_terminal
+    assert not (journal.run_directory / "run_failed.json").exists()
+
+
+def test_lineage_failure_record_collision_never_overwrites_or_advances(tmp_path, monkeypatch):
+    journal = coordinated_start(tmp_path)
+    reference = lineage(tmp_path)
+    target = journal.run_directory / "run_failed.json"
+    original_link = run_manifest.os.link
+    def racing_link(source, destination):
+        target.write_bytes(b"existing immutable terminal")
+        return original_link(source, destination)
+    monkeypatch.setattr(run_manifest.os, "link", racing_link)
+    with pytest.raises(FileExistsError):
+        journal.fail(failed_at=FINISHED, failure_category="validation_failed",
+                     counts=RunCounts(1, 1, 0, 0), unjournaled_page=reference)
+    assert target.read_bytes() == b"existing immutable terminal"
+    assert journal.counts == RunCounts(0, 0, 0, 0) and not journal.is_terminal
+    assert not list(journal.run_directory.glob("*.tmp"))
 
 
 @pytest.fixture(autouse=True)
@@ -80,7 +461,7 @@ def test_successful_start_pages_and_completion_are_immutable(tmp_path: Path) -> 
     assert record["status"] == "complete"
     assert record["page_count"] == 2
     assert record["request_count"] is None
-    assert record["journal_schema_version"] == "1.1"
+    assert record["journal_schema_version"] == "1.2"
     assert "unknown" in record["request_count_semantics"]
     assert record["total_features"] == 13
     assert record["started_at_utc"] == "2026-08-29T01:02:03Z"
