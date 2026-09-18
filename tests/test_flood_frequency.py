@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, quote_plus, urlsplit
 
 import pytest
 import requests
@@ -38,7 +38,7 @@ def synthetic_response_bytes() -> bytes:
             {
                 "href": (
                     "https://api.example.test/features/flood-freq"
-                    "?%61pi_key=encoded-secret&offset=0"
+                    "?api_key=encoded-secret&offset=0"
                 ),
                 "rel": "alternate",
             },
@@ -90,6 +90,7 @@ def prohibit_external_access(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(requests.sessions.Session, "request", fail_network)
     monkeypatch.setattr("src.configuration.dotenv_values", fail_dotenv)
+    monkeypatch.setattr("src.configuration.load_config", fail_dotenv)
 
 
 def make_config(province_id: str = "94") -> GistdaConfig:
@@ -107,6 +108,238 @@ def ingest(temp_root: Path, client: FakeClient):
         output_root=temp_root,
         retrieved_at=FIXED_TIME,
     )
+
+
+def percent_encode(value: str, depth: int) -> str:
+    for _ in range(depth):
+        value = "".join(f"%{byte:02X}" for byte in value.encode("utf-8"))
+    return value
+
+
+def clean_payload() -> dict[str, Any]:
+    return {"type": "FeatureCollection", "features": [], "numberReturned": 0, "links": []}
+
+
+def assert_credential_rejection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any],
+    *, api_key: str = DUMMY_KEY, offending: str = "",
+    content_type: str = "application/json",
+) -> None:
+    response_bytes = json.dumps(payload).encode("utf-8")
+    client = FakeClient(response=GistdaResponse(response_bytes, 200, content_type))
+    config = GistdaConfig(OFFICIAL_GISTDA_API_BASE_URL, api_key, "94")
+    output_root = tmp_path / "must-not-be-created"
+
+    def forbid_filesystem(*_: Any, **__: Any) -> None:
+        raise AssertionError("rejected credentials reached filesystem activity")
+
+    with monkeypatch.context() as guarded:
+        guarded.setattr(Path, "exists", forbid_filesystem)
+        guarded.setattr(Path, "mkdir", forbid_filesystem)
+        guarded.setattr(Path, "unlink", forbid_filesystem)
+        guarded.setattr(flood_frequency.tempfile, "NamedTemporaryFile", forbid_filesystem)
+        guarded.setattr(flood_frequency, "_write_pair_atomically", forbid_filesystem)
+        with pytest.raises(SourceSanitizationError) as caught:
+            ingest_pattani_sample(config=config, client=client, output_root=output_root,
+                                  retrieved_at=FIXED_TIME)
+    assert type(caught.value) is SourceSanitizationError
+    message = str(caught.value) + repr(caught.value)
+    assert api_key not in message
+    if offending:
+        assert offending not in message
+    for depth in (1, 2, 3):
+        assert percent_encode(api_key, depth) not in message
+    assert client.calls == [{"pv_idn": "94", "limit": 10, "offset": 0}]
+    assert not output_root.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("depth", [0, 1, 2, 3, 6])
+@pytest.mark.parametrize("location", ["nested_value", "object_key"])
+def test_configured_key_is_rejected_at_every_encoding_depth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, depth: int, location: str,
+) -> None:
+    encoded = percent_encode(DUMMY_KEY, depth)
+    candidate = f"prefix-{encoded}-suffix"
+    payload = clean_payload()
+    payload["nested"] = [{"safe": [candidate]}] if location == "nested_value" else {candidate: "safe"}
+    assert_credential_rejection(tmp_path, monkeypatch, payload, offending=candidate)
+
+
+@pytest.mark.parametrize("key", ["dummy form key", "dummy+percent%25key", "dummy ไทย+key"])
+@pytest.mark.parametrize("depth", [0, 1, 2, 4])
+def test_form_encoding_checks_intermediate_key_before_plus_or_percent_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str, depth: int,
+) -> None:
+    encoded = key
+    for _ in range(depth):
+        encoded = quote_plus(encoded, safe="")
+    payload = clean_payload()
+    payload["nested"] = {"safe": f"prefix-{encoded}-suffix"}
+    assert_credential_rejection(tmp_path, monkeypatch, payload, api_key=key, offending=encoded)
+
+
+@pytest.mark.parametrize("name", ["api_key", "API_KEY", "aPi_KeY", "api-key", "API-Key",
+                                  "aPi-kEy", "authorization", "AUTHORIZATION", "aUtHoRiZaTiOn"])
+@pytest.mark.parametrize("depth", [1, 2, 4])
+def test_encoded_credential_object_names_are_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str, depth: int,
+) -> None:
+    encoded_name = percent_encode(name, depth)
+    payload = clean_payload()
+    payload["nested"] = [{encoded_name: "unrelated-secret"}]
+    assert_credential_rejection(tmp_path, monkeypatch, payload, offending=encoded_name)
+
+
+@pytest.mark.parametrize("name", ["authorization", "AUTHORIZATION", "aUtHoRiZaTiOn"])
+def test_literal_authorization_field_is_rejected_not_silently_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str,
+) -> None:
+    payload = clean_payload()
+    payload["nested"] = {name: "unrelated-secret"}
+    assert_credential_rejection(tmp_path, monkeypatch, payload, offending="unrelated-secret")
+
+
+@pytest.mark.parametrize("name", ["api_key", "API_KEY", "api-key", "API-Key", "authorization", "AUTHORIZATION"])
+@pytest.mark.parametrize("depth", [1, 2, 4])
+@pytest.mark.parametrize("field", ["href", "unrelated_url"])
+def test_encoded_query_names_are_rejected_inside_and_outside_href(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str, depth: int, field: str,
+) -> None:
+    encoded_name = percent_encode(name, depth)
+    url = f"https://example.test/source?{encoded_name}=unrelated-secret&offset=0&safe=yes"
+    payload = clean_payload()
+    payload["nested"] = {field: url}
+    assert_credential_rejection(tmp_path, monkeypatch, payload, offending=url)
+
+
+@pytest.mark.parametrize("name", ["api_key", "API_KEY", "api-key", "API-Key", "authorization", "AUTHORIZATION"])
+@pytest.mark.parametrize("depth", [0, 1, 3])
+def test_credential_url_in_remaining_string_is_rejected_even_when_whole_url_encoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str, depth: int,
+) -> None:
+    url = f"https://example.test/source?{name}=unrelated-secret&safe=yes"
+    candidate = percent_encode(url, depth)
+    payload = clean_payload()
+    payload["nested"] = [candidate]
+    assert_credential_rejection(tmp_path, monkeypatch, payload, offending=candidate)
+
+
+@pytest.mark.parametrize("name", ["api-key", "API-Key", "authorization", "AUTHORIZATION"])
+def test_unsupported_literal_credential_query_names_in_href_are_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str,
+) -> None:
+    payload = clean_payload()
+    url = f"https://example.test/source?{name}=unrelated-secret"
+    payload["links"] = [{"href": url}]
+    assert_credential_rejection(tmp_path, monkeypatch, payload, offending=url)
+
+
+@pytest.mark.parametrize("depth", [0, 1, 3])
+def test_supported_literal_fields_and_query_names_still_remove_encoded_key_values(tmp_path: Path, depth: int) -> None:
+    encoded = percent_encode(DUMMY_KEY, depth)
+    payload = clean_payload()
+    payload["aPi_KeY"] = encoded
+    payload["nested"] = {"aPi-kEy": encoded}
+    payload["links"] = [{"href": f"https://example.test/source?ApI_KeY={encoded}&safe=hello%20world"}]
+    client = FakeClient(response=GistdaResponse(json.dumps(payload).encode(), 200, "application/json"))
+    result = ingest(tmp_path, client)
+    stored = json.loads(result.artifact_path.read_bytes())
+    assert "aPi_KeY" not in stored and stored["nested"] == {}
+    assert dict(parse_qsl(urlsplit(stored["links"][0]["href"]).query)) == {"safe": "hello world"}
+    assert json.loads(result.metadata_path.read_bytes())["removed_credential_count"] == 3
+    assert DUMMY_KEY.encode() not in result.artifact_path.read_bytes()
+
+
+def test_safe_encoded_strings_object_keys_and_query_parameters_remain_accepted(tmp_path: Path) -> None:
+    payload = clean_payload()
+    url = "https://example.test/source?%73afe=hello+world&limit=10&offset=0&safe_api_key_suffix=yes"
+    payload["nested"] = {
+        "%2573afe_name": "%2568ello+world",
+        "authorization_notes": "ordinary text",
+        "safe_api_key_suffix": "ordinary text",
+        "unrelated_url": percent_encode(url, 2),
+    }
+    payload["links"] = [{"href": url}]
+    response_bytes = json.dumps(payload).encode()
+    result = ingest(tmp_path, FakeClient(response=GistdaResponse(response_bytes, 200, "application/json")))
+    stored = json.loads(result.artifact_path.read_bytes())
+    assert stored["nested"] == payload["nested"]
+    assert dict(parse_qsl(urlsplit(stored["links"][0]["href"]).query)) == {
+        "safe": "hello world", "limit": "10", "offset": "0", "safe_api_key_suffix": "yes",
+    }
+    assert result.stored_artifact_sha256 == hashlib.sha256(result.artifact_path.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("depth", [0, 1, 3])
+def test_credentials_in_metadata_raise_safe_error_before_filesystem_activity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, depth: int,
+) -> None:
+    content_type = f"application/json; note={percent_encode(DUMMY_KEY, depth)}"
+    assert_credential_rejection(tmp_path, monkeypatch, clean_payload(),
+                                offending=content_type, content_type=content_type)
+
+
+@pytest.mark.parametrize("depth", [0, 1, 3])
+def test_encoded_key_in_safe_named_href_parameter_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, depth: int,
+) -> None:
+    payload = clean_payload()
+    encoded = percent_encode(DUMMY_KEY, depth)
+    payload["links"] = [{"href": f"https://example.test/source?note={encoded}&offset=0"}]
+    assert_credential_rejection(tmp_path, monkeypatch, payload, offending=encoded)
+
+
+@pytest.mark.parametrize("depth", [1, 3])
+def test_url_decoding_preserves_literal_plus_in_partially_encoded_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, depth: int,
+) -> None:
+    key = "dummy+percent-key"
+    encoded = percent_encode("dummy", depth) + "+percent-key"
+    payload = clean_payload()
+    payload["note"] = encoded
+    assert_credential_rejection(tmp_path, monkeypatch, payload, api_key=key, offending=encoded)
+
+
+def test_mixed_url_and_form_layers_cannot_hide_space_and_literal_pluses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = "dummy space+tail+key"
+    encoded = "dummy+space%2Btail%252Bkey"
+    payload = clean_payload()
+    payload["note"] = encoded
+    assert_credential_rejection(tmp_path, monkeypatch, payload, api_key=key, offending=encoded)
+
+
+@pytest.mark.parametrize("name", ["a%70i_key", "%2561pi_key", "API%2DKey", "Authorizatio%256E"])
+def test_partially_encoded_credential_names_are_rejected_in_keys_and_href(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str,
+) -> None:
+    payload = clean_payload()
+    payload["nested"] = {name: "unrelated-secret"}
+    assert_credential_rejection(tmp_path, monkeypatch, payload, offending=name)
+    del payload["nested"]
+    payload["links"] = [{"href": f"https://example.test/source?{name}=unrelated-secret"}]
+    assert_credential_rejection(tmp_path, monkeypatch, payload, offending=name)
+
+
+def test_rejection_leaves_preexisting_artifacts_immutable(tmp_path: Path) -> None:
+    ingest(tmp_path, FakeClient())
+    original_files = {
+        path.relative_to(tmp_path): (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in tmp_path.rglob("*") if path.is_file()
+    }
+    payload = clean_payload()
+    payload["nested"] = {"note": percent_encode(DUMMY_KEY, 3)}
+    client = FakeClient(response=GistdaResponse(json.dumps(payload).encode(), 200, "application/json"))
+    with pytest.raises(SourceSanitizationError):
+        ingest(tmp_path, client)
+    current_files = {
+        path.relative_to(tmp_path): (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in tmp_path.rglob("*") if path.is_file()
+    }
+    assert current_files == original_files
+    assert not list(tmp_path.rglob("*.tmp"))
 
 
 def test_sanitized_artifact_removes_credentials_and_preserves_safe_parameters(
@@ -131,6 +364,16 @@ def test_sanitized_artifact_removes_credentials_and_preserves_safe_parameters(
     assert "api_key" not in {key.casefold() for key in stored}
     assert "api-key" not in {key.casefold() for key in stored["nested"]}
     assert stored["nested"]["safe"] == "preserved"
+    expected = json.loads(original_bytes)
+    del expected["api_key"]
+    del expected["nested"]["API-Key"]
+    for link, href in zip(expected["links"], [
+        "https://api.example.test/features/flood-freq?limit=10&safe=hello+world",
+        "https://api.example.test/features/flood-freq?offset=0",
+        "https://api.example.test/features/flood-freq?pv_idn=94",
+    ]):
+        link["href"] = href
+    assert stored_bytes == (json.dumps(expected, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
     queries = [dict(parse_qsl(urlsplit(link["href"]).query)) for link in stored["links"]]
     assert queries == [

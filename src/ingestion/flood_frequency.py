@@ -10,8 +10,8 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Final
-from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
+from typing import Any, Final, Iterator
+from urllib.parse import parse_qsl, unquote, unquote_plus, urlencode, urlsplit, urlunsplit
 
 from src.configuration import GistdaConfig
 from src.ingestion.gistda_client import FLOOD_FREQUENCY_PATH, GistdaClient
@@ -27,7 +27,8 @@ SOURCE_SUBDIRECTORY: Final = Path("gistda/flood_freq/pattani")
 # Project scope derived from previously observed behavior; this is not an
 # officially documented mapping of province ID 94 to Pattani.
 PATTANI_PROVINCE_ID: Final = "94"
-_CREDENTIAL_NAMES: Final = frozenset({"api_key", "api-key"})
+_REMOVABLE_CREDENTIAL_FIELDS: Final = frozenset({"api_key", "api-key"})
+_CREDENTIAL_NAMES: Final = frozenset({"api_key", "api-key", "authorization"})
 
 
 class SourceSanitizationError(ValueError):
@@ -170,8 +171,8 @@ def ingest_pattani_page(
             "The original response body was not persisted"
         ),
     }
-    metadata_bytes = _serialize_json(metadata)
-    _verify_no_configured_key(metadata_bytes, config.api_key)
+    metadata_bytes = _serialize_sanitized(metadata)
+    _verify_sanitized(metadata, metadata_bytes, config.api_key)
 
     if artifact_path.exists() or metadata_path.exists():
         if (
@@ -287,7 +288,7 @@ def _validate_page_structure(
 def _sanitize_response(original_bytes: bytes) -> tuple[Any, _SanitizationReport]:
     try:
         payload = json.loads(original_bytes)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
         raise SourceSanitizationError(
             "source response is not valid JSON and was not persisted"
         ) from None
@@ -295,7 +296,7 @@ def _sanitize_response(original_bytes: bytes) -> tuple[Any, _SanitizationReport]
     report = _SanitizationReport(set(), set())
     try:
         sanitized = _sanitize_value(payload, report)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
         raise SourceSanitizationError(
             "source response sanitization failed and was not persisted"
         ) from None
@@ -308,7 +309,9 @@ def _sanitize_value(value: Any, report: _SanitizationReport) -> Any:
         for key, child in value.items():
             if not isinstance(key, str):
                 raise TypeError("JSON object key is not a string")
-            if key.casefold() in _CREDENTIAL_NAMES:
+            if key.casefold() not in _CREDENTIAL_NAMES and _is_credential_name(key):
+                raise ValueError("encoded credential field rejected")
+            if key.casefold() in _REMOVABLE_CREDENTIAL_FIELDS:
                 report.field_names.add(key)
                 report.removal_count += 1
                 continue
@@ -324,6 +327,12 @@ def _sanitize_value(value: Any, report: _SanitizationReport) -> Any:
 
 def _sanitize_url(url: str, report: _SanitizationReport) -> str:
     parts = urlsplit(url)
+    # parse_qsl decodes names once. Inspect their original spelling first so
+    # encoded credential names are rejected, not silently removed or retained.
+    for parameter in parts.query.split("&"):
+        name = parameter.partition("=")[0]
+        if name.casefold() not in _CREDENTIAL_NAMES and _is_credential_name(name):
+            raise ValueError("encoded credential query name rejected")
     safe_query: list[tuple[str, str]] = []
     for name, value in parse_qsl(parts.query, keep_blank_values=True):
         if name.casefold() == "api_key":
@@ -339,7 +348,7 @@ def _sanitize_url(url: str, report: _SanitizationReport) -> str:
 def _serialize_sanitized(payload: Any) -> bytes:
     try:
         return _serialize_json(payload)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
         raise SourceSanitizationError(
             "sanitized source response could not be serialized"
         ) from None
@@ -355,7 +364,7 @@ def _verify_sanitized(payload: Any, stored_bytes: bytes, api_key: str) -> None:
     try:
         _verify_value(payload, api_key)
         _verify_no_configured_key(stored_bytes, api_key)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
         raise SourceSanitizationError(
             "sanitized source response failed credential-safety verification"
         ) from None
@@ -364,24 +373,52 @@ def _verify_sanitized(payload: Any, stored_bytes: bytes, api_key: str) -> None:
 def _verify_value(value: Any, api_key: str) -> None:
     if isinstance(value, dict):
         for key, child in value.items():
-            if key.casefold() in _CREDENTIAL_NAMES:
+            if not isinstance(key, str) or _is_credential_name(key):
                 raise ValueError("credential field remains")
-            if key.casefold() == "href" and isinstance(child, str):
-                if any(
-                    name.casefold() == "api_key"
-                    for name, _ in parse_qsl(
-                        urlsplit(child).query,
-                        keep_blank_values=True,
-                    )
-                ):
-                    raise ValueError("credential query parameter remains")
+            _verify_text(key, api_key)
             _verify_value(child, api_key)
     elif isinstance(value, list):
         for item in value:
             _verify_value(item, api_key)
-    elif isinstance(value, str) and api_key:
-        if api_key in value or api_key in unquote(value):
-            raise ValueError("configured credential remains in string value")
+    elif isinstance(value, str):
+        _verify_text(value, api_key)
+
+
+def _decoded_text(value: str) -> Iterator[str]:
+    """Check every URL/form decoding path, including each intermediate text.
+
+    URL decoding preserves literal '+', while form decoding turns it into a
+    space. Both are needed for partially encoded and mixed-layer credentials.
+    """
+    pending = [value]
+    checked: set[str] = set()
+    while pending:
+        value = pending.pop()
+        if value in checked:
+            continue
+        checked.add(value)
+        yield value
+        for decode in (unquote, unquote_plus):
+            decoded = decode(value)
+            if decoded not in checked:
+                pending.append(decoded)
+
+
+def _is_credential_name(value: str) -> bool:
+    return any(text.casefold() in _CREDENTIAL_NAMES for text in _decoded_text(value))
+
+
+def _verify_text(value: str, api_key: str) -> None:
+    for text in _decoded_text(value):
+        # Check before decoding again: a literal '+' or percent sequence may
+        # be part of the configured key and disappear in a later representation.
+        if api_key and api_key in text:
+            raise ValueError("configured credential remains in candidate text")
+        if any(
+            _is_credential_name(name)
+            for name, _ in parse_qsl(urlsplit(text).query, keep_blank_values=True)
+        ):
+            raise ValueError("credential query parameter remains")
 
 
 def _verify_no_configured_key(content: bytes, api_key: str) -> None:
