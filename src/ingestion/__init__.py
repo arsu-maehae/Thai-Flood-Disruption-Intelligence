@@ -16,6 +16,7 @@ from .flood_frequency import (
     ingest_pattani_sample,
 )
 from .pagination import PaginationPolicyError, PaginationRunResult, paginate_pattani
+from .run_manifest import PageJournalRecord, RunJournal, RunJournalError
 
 __all__ = [
     "GistdaClient",
@@ -32,4 +33,7 @@ __all__ = [
     "PaginationPolicyError",
     "PaginationRunResult",
     "paginate_pattani",
+    "PageJournalRecord",
+    "RunJournal",
+    "RunJournalError",
 ]
