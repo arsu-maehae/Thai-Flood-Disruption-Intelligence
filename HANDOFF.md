@@ -1,6 +1,6 @@
 # Project Handoff
 
-This document captures the project state reviewed on 2026-09-18. Recheck Git status and tests before continuing; this is a handoff snapshot, not a replacement for the project specification or API evidence.
+This document captures the project state reviewed on 2026-09-19. Recheck Git status and tests before continuing; this is a handoff snapshot, not a replacement for the project specification or API evidence.
 
 ## Goal and current scope
 
@@ -24,6 +24,8 @@ PostGIS, infrastructure integration, geospatial transformation, disruption scori
 - Source ingestion sanitizes credentials before persistence, uses immutable no-overwrite publication, and records separate original-response and stored-artifact hashes and byte counts.
 - Conservative pagination detects repeated pages, duplicate usable string IDs, inconsistent counts, and changing numberMatched presence/value. It reports incomplete ID checks and enforces a maximum-page cap.
 - Pagination advances by requested limit and stops on empty/partial pages as implementation policy, not an official guarantee. It never follows response links.
+- `verify_run(output_root, run_id, *, api_key=None)` performs read-only verification of inactive runs.
+- The guarded operator provides network-free preflight and verification commands plus a separately authorized journaled run command for the repository `data/raw` root.
 
 ## API evidence
 
@@ -75,9 +77,55 @@ Milestone 8B is approved, committed, and pushed, as reported by the project owne
 - Journaled pagination requires `max_pages` not to exceed `100,000`, an internal safety cap rather than a GISTDA contract.
 - Public additions include `RunCounts`, `PaginationRunError`, and `UnjournaledPageReference`.
 
+## Completed milestone: 8C-1
+
+Milestone 8C-1 is complete. Commit: `2e743a1 Harden GISTDA credential verification`.
+
+- Repeated URL/form decoding checks literal, encoded, and multiply encoded credentials.
+- Credential values, object-key names, URL query-parameter names, and serialized candidates are checked before filesystem publication.
+- Rejections use credential-safe errors and persist no artifact, metadata, temporary file, or destination created solely for a rejected response.
+
+## Completed milestone: 8C-2
+
+Milestone 8C-2 is complete. Commit: `ca7675f Add offline Pattani run verification`.
+
+- Public interface: `verify_run(output_root, run_id, *, api_key=None)`.
+- Verification is read-only and validates journals, referenced artifacts, metadata, hashes, counts, paths, provenance, terminal state, temporary remnants, unjournaled-page lineage, and credential absence.
+- Verification requires an inactive writer and provides no concurrency protection.
+- Without a supplied key, configured-key absence remains unverified.
+- Original-response hashes and byte counts cannot be independently recomputed because original response bodies are intentionally not persisted.
+
+## Completed milestone: 8C-3
+
+Milestone 8C-3 is complete. Commit: `3f2e5ee Add guarded Pattani ingestion operator`.
+
+CLI entrypoints:
+
+- `python -m src.ingestion.operator preflight`
+- `python -m src.ingestion.operator verify`
+- `python -m src.ingestion.operator run`
+
+The operating procedure is documented in `docs/INGESTION_OPERATIONS.md`.
+
+- The Phase 1 operator supports only this repository's `data/raw` root.
+- Preflight and verify are network-free; configuration loading is explicit.
+- Run requires both `--authorize-live` and `--load-local-config`, but these runtime flags never replace separate user authorization.
+- Run repeats complete preflight, uses journaled pagination, and then performs offline verification with published terminal status reported separately from verification status and coverage.
+- `KeyboardInterrupt` exits 130 without inventing a terminal state.
+- The operator implements no retries, response-link following, resume, or concurrency.
+- The operator performs no automatic cleanup or repair of ingestion artifacts, journal records, or run directories.
+- Preflight cleans only its exclusively owned disposable probe directory and refuses readiness if that cleanup fails.
+
+## GitHub state
+
+- Branch: `main`
+- Implementation checkpoint before this handoff-only update: `3f2e5ee Add guarded Pattani ingestion operator`.
+- Repository: `arsu-maehae/Thai-Flood-Disruption-Intelligence`
+- At the start of this handoff update, local `main` and `origin/main` were synchronized at `3f2e5ee` on 2026-09-19.
+
 ## Locally reported verification
 
-Latest locally recorded result: **396 tests passed**; `compileall` passed; `git diff --check` passed.
+Latest locally recorded result: **819 tests passed, 5 skipped**; `compileall` passed; whitespace and authorized-scope checks passed. The platform skips concern unavailable symlink behavior.
 
 These are locally reported verification results, not external proof or evidence of official API behavior.
 
@@ -85,13 +133,18 @@ These are locally reported verification results, not external proof or evidence 
 
 - One writer per run; no concurrency.
 - Resume is not implemented.
-- Ordering and empty/partial termination remain implementation policy, not official GISTDA guarantees. Snapshot consistency and general count semantics remain unverified.
+- Full Pattani ingestion has not occurred.
+- Stable ordering, snapshot consistency, count semantics, general termination behavior, rate limits, duration, payload size, and resource requirements remain unverified.
+- Ordering and empty/partial termination remain implementation policy, not official GISTDA guarantees.
 - Source-publication failure before a successful ingestion return may leave uncertain remnants; no safe page reference is claimed for those remnants.
-- Full Pattani ingestion has not been performed.
+- `pv_idn=94` remains observed project configuration, not an officially documented Pattani mapping.
+- Operator readiness does not guarantee exhaustive or snapshot-consistent data.
 
 ## Recommended next step
 
-Review full-ingestion readiness and the operating procedure. Continue with synthetic/offline checks first. Do not start full ingestion without separate explicit authorization.
+Review and separately authorize a bounded live readiness probe only if it is still needed. Authorization must specify the exact request budget, `limit`, `max_pages`, `run_id`, minimum free-byte floor, and accepted uncertainties. Do not implicitly approve full ingestion, and do not calculate the request cap solely from observed `numberMatched`.
+
+No new live readiness probe or full ingestion has occurred as part of Milestone 8C.
 
 ## Collaboration rules
 
