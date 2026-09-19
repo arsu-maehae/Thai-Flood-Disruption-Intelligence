@@ -63,3 +63,9 @@ Run tests with:
 ```text
 pytest
 ```
+
+## Ingestion operator
+
+The guarded operator provides network-free `preflight` and `verify` commands and a separately authorized `run` command. Phase 1 supports only this repository's `data/raw` output root. A live run requires explicit user authorization as well as both runtime safeguards; successful preflight alone is not authorization.
+
+See [Pattani Ingestion Operations](docs/INGESTION_OPERATIONS.md) for parameter selection, commands, failure handling, verification, and current limitations. Do not begin full ingestion without separate approval.
