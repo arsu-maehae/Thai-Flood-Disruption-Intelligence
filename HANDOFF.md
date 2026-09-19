@@ -123,6 +123,34 @@ The operating procedure is documented in `docs/INGESTION_OPERATIONS.md`.
 - Repository: `arsu-maehae/Thai-Flood-Disruption-Intelligence`
 - At the start of this handoff update, local `main` and `origin/main` were synchronized at `3f2e5ee` on 2026-09-19.
 
+## Completed operational readiness probe
+
+Date: 2026-09-19 UTC
+
+- Run ID: `pattani-readiness-20260919-01`
+- Exactly one application-level request was made with `pv_idn=94`, `limit=10`, `max_pages=1`, and offset `0`.
+- No retries occurred, and response links were not followed.
+- Published terminal status: `failed`.
+- Expected safety category: `max_pages_exhausted`.
+- Counts:
+  - attempted requests: 1
+  - persisted pages: 1
+  - validated pages: 1
+  - journaled pages: 1
+- Offline verification confirmed:
+  - a valid failed terminal
+  - configured-key checking was complete
+  - final counts
+  - no verification issues
+  - valid hashes, byte counts, provenance, containment, and lineage
+  - no credential, temporary remnants, or unexpected entries
+- The response contained 10 features and observed `numberMatched=112073`. These remain observations, not API guarantees.
+- Git remained clean.
+- Full Pattani ingestion has not occurred.
+- The run is immutable and must not be reused or resumed.
+
+A larger production page size remains unverified. Before selecting full-ingestion parameters, use a separately authorized one-request page-size probe.
+
 ## Locally reported verification
 
 Latest locally recorded result: **819 tests passed, 5 skipped**; `compileall` passed; whitespace and authorized-scope checks passed. The platform skips concern unavailable symlink behavior.
