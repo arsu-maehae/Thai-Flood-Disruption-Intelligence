@@ -146,7 +146,7 @@ Date: 2026-09-19 UTC
   - no credential, temporary remnants, or unexpected entries
 - The response contained 10 features and observed `numberMatched=112073`. These remain observations, not API guarantees.
 - Git remained clean.
-- Full Pattani ingestion has not occurred.
+- At the time of this readiness probe, full Pattani ingestion had not occurred.
 - The run is immutable and must not be reused or resumed.
 
 ## Completed page-size probe
@@ -162,9 +162,28 @@ Date: 2026-09-19 UTC
 - The implementation published a valid failed terminal with expected safety category `max_pages_exhausted` because the single permitted page was full.
 - Counts were attempted `1`, persisted `1`, validated `1`, and journaled `1`.
 - Offline verification reported no issues and confirmed credential safety, integrity, containment, provenance, lineage, and no temporary or unexpected remnants.
-- The run is immutable and must not be reused or resumed. Full Pattani ingestion has not occurred.
+- The run is immutable and must not be reused or resumed. At the time of this page-size probe, full Pattani ingestion had not occurred.
 
 These are observations from one response, not API guarantees. They do not establish stable ordering, snapshot consistency, complete coverage, duration, payload-size uniformity, or general count and termination semantics.
+
+## Completed policy-based Pattani full ingestion
+
+Date: 2026-09-22 UTC
+
+- Run ID: `pattani-full-20260922-01`.
+- The implementation reached a policy-complete terminal with stop reason `partial_page`.
+- With `limit=1000`, 113 requests covered offsets `0` through `112000`; the final page contained 73 records.
+- Counts were attempted `113`, persisted `113`, validated `113`, and journaled `113`.
+- The run stored 112073 total features. `numberMatched` was present and consistently `112073`.
+- The duplicate-ID check was complete.
+- Aggregate original-response size was `259102237` bytes, and aggregate credential-sanitized artifact size was `574327594` bytes.
+- Lifecycle time to the terminal record was `205.031609` seconds.
+- Offline verification completed with no issues; configured-key checking was complete.
+- Credential safety, containment, stored hashes, byte counts, provenance, lineage, remnant checks, and accounting passed. All referenced artifacts and metadata existed.
+- Original-response hashes remain recorded provenance and cannot be independently recomputed because original response bodies are intentionally not persisted.
+- No retries occurred, no response links were followed, and Git remained clean.
+
+This is completion under the project's observed implementation policy. It does not prove exhaustive or snapshot-consistent provider coverage. Ordering, count semantics, and termination remain non-contractual. The run is immutable and must not be reused, resumed, deleted, overwritten, or repaired. Generated data remains ignored and must not be staged or committed. The repository alone is not a backup of the generated dataset.
 
 ## Locally reported verification
 
@@ -176,8 +195,8 @@ These are locally reported verification results, not external proof or evidence 
 
 - One writer per run; no concurrency.
 - Resume is not implemented.
-- Full Pattani ingestion has not occurred.
-- Stable ordering, snapshot consistency, count semantics, general termination behavior, rate limits, duration, payload size, and resource requirements remain unverified.
+- One policy-based Pattani full ingestion completed on 2026-09-22; this does not establish exhaustive or snapshot-consistent provider coverage.
+- Stable ordering, snapshot consistency, count semantics, general termination behavior, rate limits, duration, payload size, and resource requirements remain unverified as general provider behavior.
 - Ordering and empty/partial termination remain implementation policy, not official GISTDA guarantees.
 - Source-publication failure before a successful ingestion return may leave uncertain remnants; no safe page reference is claimed for those remnants.
 - `pv_idn=94` remains observed project configuration, not an officially documented Pattani mapping.
@@ -185,9 +204,9 @@ These are locally reported verification results, not external proof or evidence 
 
 ## Recommended next step
 
-Review the bounded probe evidence before selecting full-ingestion parameters. Any further probe or full ingestion requires separate authorization specifying the exact request budget, `limit`, `max_pages`, `run_id`, minimum free-byte floor, and accepted uncertainties. Do not implicitly approve full ingestion, and do not calculate the request cap solely from observed `numberMatched`.
+Preserve and back up the immutable generated dataset outside the Git repository, then separately review downstream validation and transformation work. Any further live run requires separate authorization with a new run ID and explicit bounds; do not reuse or resume the completed run.
 
-The completed probes above occurred after Milestone 8C under separate explicit authorizations. Full Pattani ingestion remains unperformed.
+Milestone 8C itself remained offline. The completed probes and policy-based full ingestion above occurred afterward under separate explicit authorizations.
 
 ## Collaboration rules
 

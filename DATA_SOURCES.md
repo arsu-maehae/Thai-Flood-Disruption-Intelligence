@@ -119,9 +119,28 @@ Observed on **2026-09-19 UTC** as **Previously observed** behavior:
 - Because the bounded probe used `max_pages=1` and received a full page, the implementation published a valid failed terminal with category `max_pages_exhausted`.
 - Run counts were attempted `1`, persisted `1`, validated `1`, and journaled `1`.
 - Offline verification reported no issues and confirmed credential safety, integrity, containment, provenance, lineage, and no temporary or unexpected remnants.
-- The run is immutable and must not be reused or resumed. Full Pattani ingestion has not occurred.
+- The run is immutable and must not be reused or resumed. At the time of this probe, full Pattani ingestion had not occurred.
 
 These findings describe one response and are not API guarantees. They do not establish stable ordering, snapshot consistency, complete coverage, duration, payload-size uniformity, or general count and termination semantics.
+
+#### Policy-based Pattani full ingestion
+
+Observed on **2026-09-22 UTC** as **Previously observed** project behavior:
+
+- Run ID: `pattani-full-20260922-01`.
+- The implementation reached a policy-complete terminal with stop reason `partial_page`.
+- With `limit=1000`, 113 requests covered offsets `0` through `112000`; the final page contained 73 records.
+- Counts were attempted `113`, persisted `113`, validated `113`, and journaled `113`.
+- The run stored 112073 total features. `numberMatched` was present and consistently `112073` across the run.
+- The duplicate-ID check was complete.
+- Aggregate original-response size was `259102237` bytes. Aggregate credential-sanitized artifact size was `574327594` bytes.
+- Lifecycle time to the terminal record was `205.031609` seconds.
+- Offline verification completed with no issues, and configured-key checking was complete.
+- Credential safety, containment, stored hashes, byte counts, provenance, lineage, remnant checks, and accounting passed. All referenced artifacts and metadata existed.
+- Original-response hashes are recorded as provenance but cannot be independently recomputed because original response bodies are intentionally not persisted.
+- No retry occurred, no response link was followed, and Git remained clean.
+
+This is completion under the project's observed implementation policy. It does not prove exhaustive or snapshot-consistent provider coverage. Ordering, count semantics, and termination remain non-contractual. The run is immutable and must not be reused, resumed, deleted, overwritten, or repaired. Generated data remains ignored and must not be staged or committed; the repository alone is not a backup of the generated dataset.
 
 ### Credential-sanitized source contract
 
