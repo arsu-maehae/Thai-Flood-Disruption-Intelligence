@@ -13,6 +13,7 @@ PostGIS, infrastructure integration, geospatial transformation, disruption scori
 - `README.md`: operational scope and security requirements.
 - `PROJECT_SPEC.md`: broader architecture and long-term roadmap.
 - `DATA_SOURCES.md`: official API evidence, prior observations, and unknowns.
+- `docs/PHASE1_CLOSEOUT.md`: Phase 1 ingestion and backup closeout evidence.
 - `src/configuration.py`, `src/ingestion/`, and `tests/`: current implementation.
 
 ## Implemented
@@ -185,6 +186,14 @@ Date: 2026-09-22 UTC
 
 This is completion under the project's observed implementation policy. It does not prove exhaustive or snapshot-consistent provider coverage. Ordering, count semantics, and termination remain non-contractual. The run is immutable and must not be reused, resumed, deleted, overwritten, or repaired. Generated data remains ignored and must not be staged or committed. The repository alone is not a backup of the generated dataset.
 
+## Phase 1 closeout
+
+Phase 1 is operationally closed. Run `pattani-full-20260922-01` completed with 113 pages and 112,073 features, and offline source-run verification passed.
+
+The AES-256 backup restore was verified for 359 source files totaling 581,512,053 bytes. The Google Drive copy is Restricted. The downloaded archive matched SHA-256 `861b87c016b382d6a7dd8242d30ec430e7cce8c266a00b160033e27960caa975`, and 7-Zip reported “Everything is Ok” with exit code 0. Restored verification reported the expected `configured_key_unverified` because no API key was supplied.
+
+This is operational evidence, not an official API guarantee. It does not establish exhaustive or snapshot-consistent provider coverage. Phase 2 begins with source-contract inventory; PostGIS geometry construction and SRID assignment remain blocked pending official CRS evidence. See `docs/PHASE1_CLOSEOUT.md` for the closeout boundary.
+
 ## Locally reported verification
 
 Latest locally recorded result: **819 tests passed, 5 skipped**; `compileall` passed; whitespace and authorized-scope checks passed. The platform skips concern unavailable symlink behavior.
@@ -204,7 +213,7 @@ These are locally reported verification results, not external proof or evidence 
 
 ## Recommended next step
 
-Preserve and back up the immutable generated dataset outside the Git repository, then separately review downstream validation and transformation work. Any further live run requires separate authorization with a new run ID and explicit bounds; do not reuse or resume the completed run.
+Begin Phase 2 with a separately reviewed source-contract inventory. Do not begin real-data profiling, transformation, database setup, PostGIS work, or another live ingestion without separate authorization.
 
 Milestone 8C itself remained offline. The completed probes and policy-based full ingestion above occurred afterward under separate explicit authorizations.
 
