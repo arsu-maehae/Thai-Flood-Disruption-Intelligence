@@ -35,6 +35,7 @@ _SAFE_ERROR_CATEGORIES = frozenset({
     "invalid_number_returned",
     "invalid_page_index",
     "invalid_page_result",
+    "invalid_page_pair",
     "invalid_page_sequence",
     "invalid_parsed_page",
     "invalid_payload_type",
@@ -484,6 +485,34 @@ def validate_page_sequence(
         configured_key_check_complete=key_check_complete,
         issue_categories=tuple(sorted(issues)),
     )
+
+
+def _validated_features(
+    parsed: ParsedSourcePage,
+    validation: PageValidationResult,
+) -> tuple[dict[str, Any], ...]:
+    """Return a fresh feature snapshot only when an existing validated pair matches."""
+
+    if not _valid_parsed_page(parsed) or not _valid_page_result(validation):
+        raise SourceStructuralError("invalid_page_pair")
+    recreated = validate_source_page(
+        parsed,
+        page_index=validation.page_index,
+        requested_offset=validation.requested_offset,
+        requested_limit=validation.requested_limit,
+    )
+    if not hmac.compare_digest(recreated._proof, validation._proof):
+        raise SourceStructuralError("invalid_page_pair")
+    try:
+        document = json.loads(parsed._document_bytes)
+        features = document["features"]
+    except (KeyError, TypeError, ValueError, UnicodeDecodeError, RecursionError):
+        raise SourceStructuralError("invalid_page_pair") from None
+    if not isinstance(features, list) or not all(
+        isinstance(feature, dict) for feature in features
+    ):
+        raise SourceStructuralError("invalid_page_pair")
+    return tuple(features)
 
 
 def _nonnegative_integer(value: object) -> bool:

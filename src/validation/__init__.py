@@ -11,6 +11,16 @@ from .flood_frequency import (
     validate_page_sequence,
     validate_source_page,
 )
+from .flood_profile import (
+    FloodProfileError,
+    FloodProfileResult,
+    GeometryTypeCount,
+    JsonTypeCounts,
+    MemberCounts,
+    PropertyFieldProfile,
+    ValidatedProfilePage,
+    profile_validated_pages,
+)
 
 __all__ = [
     "PageValidationResult",
@@ -22,4 +32,12 @@ __all__ = [
     "parse_source_page",
     "validate_page_sequence",
     "validate_source_page",
+    "FloodProfileError",
+    "FloodProfileResult",
+    "GeometryTypeCount",
+    "JsonTypeCounts",
+    "MemberCounts",
+    "PropertyFieldProfile",
+    "ValidatedProfilePage",
+    "profile_validated_pages",
 ]
