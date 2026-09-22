@@ -149,7 +149,22 @@ Date: 2026-09-19 UTC
 - Full Pattani ingestion has not occurred.
 - The run is immutable and must not be reused or resumed.
 
-A larger production page size remains unverified. Before selecting full-ingestion parameters, use a separately authorized one-request page-size probe.
+## Completed page-size probe
+
+Date: 2026-09-19 UTC
+
+- Run ID: `pattani-page-size-1000-20260919-01`
+- Exactly one application-level request used `pv_idn=94`, `limit=1000`, `max_pages=1`, and offset `0`; no retry occurred, and response links were not followed.
+- The response was HTTP `200` with content type `application/geo+json`.
+- `numberReturned=1000` and `numberMatched=112073` were observed.
+- The original response was `2836590` bytes, and the stored credential-sanitized artifact was `6544748` bytes.
+- Lifecycle time to the terminal record was `1.783328` seconds.
+- The implementation published a valid failed terminal with expected safety category `max_pages_exhausted` because the single permitted page was full.
+- Counts were attempted `1`, persisted `1`, validated `1`, and journaled `1`.
+- Offline verification reported no issues and confirmed credential safety, integrity, containment, provenance, lineage, and no temporary or unexpected remnants.
+- The run is immutable and must not be reused or resumed. Full Pattani ingestion has not occurred.
+
+These are observations from one response, not API guarantees. They do not establish stable ordering, snapshot consistency, complete coverage, duration, payload-size uniformity, or general count and termination semantics.
 
 ## Locally reported verification
 
@@ -170,9 +185,9 @@ These are locally reported verification results, not external proof or evidence 
 
 ## Recommended next step
 
-Review and separately authorize a bounded live readiness probe only if it is still needed. Authorization must specify the exact request budget, `limit`, `max_pages`, `run_id`, minimum free-byte floor, and accepted uncertainties. Do not implicitly approve full ingestion, and do not calculate the request cap solely from observed `numberMatched`.
+Review the bounded probe evidence before selecting full-ingestion parameters. Any further probe or full ingestion requires separate authorization specifying the exact request budget, `limit`, `max_pages`, `run_id`, minimum free-byte floor, and accepted uncertainties. Do not implicitly approve full ingestion, and do not calculate the request cap solely from observed `numberMatched`.
 
-No new live readiness probe or full ingestion has occurred as part of Milestone 8C.
+The completed probes above occurred after Milestone 8C under separate explicit authorizations. Full Pattani ingestion remains unperformed.
 
 ## Collaboration rules
 

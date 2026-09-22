@@ -107,6 +107,22 @@ Verified on **2026-08-29 UTC** as **Previously observed** behavior:
 
 These findings are observations, not official pagination guarantees. Stable ordering, snapshot consistency, count semantics, and termination behavior remain **Not yet verified** as a general contract. Response links must never be followed as trusted request instructions.
 
+#### Bounded page-size probe
+
+Observed on **2026-09-19 UTC** as **Previously observed** behavior:
+
+- Exactly one request used `pv_idn=94`, `limit=1000`, and offset `0`; no retry occurred, and response links were not followed.
+- The response was HTTP `200` with content type `application/geo+json`.
+- `numberReturned=1000` and `numberMatched=112073` were observed.
+- The original response was `2836590` bytes. The stored credential-sanitized artifact was `6544748` bytes.
+- Lifecycle time to the terminal record was `1.783328` seconds.
+- Because the bounded probe used `max_pages=1` and received a full page, the implementation published a valid failed terminal with category `max_pages_exhausted`.
+- Run counts were attempted `1`, persisted `1`, validated `1`, and journaled `1`.
+- Offline verification reported no issues and confirmed credential safety, integrity, containment, provenance, lineage, and no temporary or unexpected remnants.
+- The run is immutable and must not be reused or resumed. Full Pattani ingestion has not occurred.
+
+These findings describe one response and are not API guarantees. They do not establish stable ordering, snapshot consistency, complete coverage, duration, payload-size uniformity, or general count and termination semantics.
+
 ### Credential-sanitized source contract
 
 An active credential must never be persisted. For GISTDA flood-frequency ingestion:
