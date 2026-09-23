@@ -19,6 +19,16 @@ from .pagination import PaginationPolicyError, PaginationRunError, PaginationRun
 from .run_manifest import (
     PageJournalRecord, RunCounts, RunJournal, RunJournalError, UnjournaledPageReference,
 )
+from .infrastructure_acquisition import (
+    AcquisitionError,
+    AcquisitionResult,
+    ApprovedResourceSpec,
+    ArchiveLimits,
+    CandidateResourceEvidence,
+    MetadataRevalidationResult,
+    acquire_resource,
+    revalidate_selected_metadata,
+)
 
 __all__ = [
     "GistdaClient",
@@ -41,4 +51,12 @@ __all__ = [
     "RunCounts",
     "RunJournalError",
     "UnjournaledPageReference",
+    "AcquisitionError",
+    "AcquisitionResult",
+    "ApprovedResourceSpec",
+    "ArchiveLimits",
+    "CandidateResourceEvidence",
+    "MetadataRevalidationResult",
+    "acquire_resource",
+    "revalidate_selected_metadata",
 ]
