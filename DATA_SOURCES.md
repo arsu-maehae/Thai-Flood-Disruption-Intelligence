@@ -142,6 +142,36 @@ Observed on **2026-09-22 UTC** as **Previously observed** project behavior:
 
 This is completion under the project's observed implementation policy. It does not prove exhaustive or snapshot-consistent provider coverage. Ordering, count semantics, and termination remain non-contractual. The run is immutable and must not be reused, resumed, deleted, overwritten, or repaired. Generated data remains ignored and must not be staged or committed; the repository alone is not a backup of the generated dataset.
 
+#### Phase 2 offline validation, profiling, and transformation
+
+Phase 2 implementation milestones:
+
+- Phase 2A source contract: commit `bf48d94`.
+- Phase 2B synthetic source validation: commit `0169c14`.
+- Phase 2C offline aggregate profiler: commit `4744caf`.
+- Phase 2D neutral deterministic transformation: commit `f40dd41`.
+
+The following profiling results for run `pattani-full-20260922-01` are classified as **Previously observed**, not as an official provider contract:
+
+- The validated input comprised 113 pages and 112,073 features.
+- Credential verification was complete, and validation reported zero issues.
+- All 112,073 geometry members were present, non-null objects whose observed type label was `MultiPolygon`; no missing, null, or other geometry members were observed.
+- Forty property fields were observed. Every field was present and non-null in all 112,073 features.
+
+These structural observations do not establish CRS, units, field meanings, relationships between fields, ordering, snapshot consistency, or exhaustive provider coverage. No feature IDs, coordinates, or individual property values were included in the aggregate profile.
+
+The following Phase 2D result is **Previously observed** project execution evidence:
+
+- Transformation ID: `neutral-jsonl-v1-20260923-01`.
+- Output comprised 113 deterministic JSONL page files and one completion manifest, containing 112,073 records.
+- Reported total JSONL size was `262945631` bytes.
+- Completion-manifest SHA-256 was `3a901d29a66d348168deb319920cce0529092580136da09bf65c496bcddb51a2`.
+- Source verification completed with zero issues. Credential, lineage, containment, integrity, and remnant checks passed.
+- The transformation made zero network requests and constructed zero live API clients.
+- Output is ignored by Git and is reproducible from the immutable source dataset plus committed code.
+
+The transformation schema is a versioned project schema based on the observed snapshot, not an official GISTDA contract. It preserved source geometry without CRS assignment or reprojection and retained source attributes without semantic interpretation. No PostGIS loading, scoring, or infrastructure integration occurred.
+
 ### Credential-sanitized source contract
 
 An active credential must never be persisted. For GISTDA flood-frequency ingestion:

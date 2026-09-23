@@ -1,10 +1,10 @@
 # Project Handoff
 
-This document captures the project state reviewed on 2026-09-19. Recheck Git status and tests before continuing; this is a handoff snapshot, not a replacement for the project specification or API evidence.
+This document captures the project state reviewed on 2026-09-23. Recheck Git status and tests before continuing; this is a handoff snapshot, not a replacement for the project specification or API evidence.
 
 ## Goal and current scope
 
-Thai Flood Disruption Intelligence aims to analyze flood exposure and infrastructure disruption in Thailand. Current Phase 1 is limited to a reliable GISTDA Historical Flood Recurrence ingestion pipeline for Pattani.
+Thai Flood Disruption Intelligence aims to analyze flood exposure and infrastructure disruption in Thailand. Phase 1 ingestion and Phase 2 offline validation, profiling, and neutral transformation are complete for the Pattani GISTDA Historical Flood Recurrence source.
 
 PostGIS, infrastructure integration, geospatial transformation, disruption scoring, machine learning, APIs, dashboards, and production orchestration are future work.
 
@@ -27,6 +27,9 @@ PostGIS, infrastructure integration, geospatial transformation, disruption scori
 - Pagination advances by requested limit and stops on empty/partial pages as implementation policy, not an official guarantee. It never follows response links.
 - `verify_run(output_root, run_id, *, api_key=None)` performs read-only verification of inactive runs.
 - The guarded operator provides network-free preflight and verification commands plus a separately authorized journaled run command for the repository `data/raw` root.
+- Phase 2B provides strict offline parsing and structural validation with duplicate-key and credential checks.
+- Phase 2C provides credential-safe aggregate structural profiling of validated pages.
+- Phase 2D publishes deterministic JSONL pages with page-level source lineage, no-overwrite semantics, and a completion manifest published last.
 
 ## API evidence
 
@@ -120,9 +123,9 @@ The operating procedure is documented in `docs/INGESTION_OPERATIONS.md`.
 ## GitHub state
 
 - Branch: `main`
-- Implementation checkpoint before this handoff-only update: `3f2e5ee Add guarded Pattani ingestion operator`.
+- Implementation checkpoint before this documentation-only update: `f40dd41` (Phase 2D neutral deterministic transformation).
 - Repository: `arsu-maehae/Thai-Flood-Disruption-Intelligence`
-- At the start of this handoff update, local `main` and `origin/main` were synchronized at `3f2e5ee` on 2026-09-19.
+- At the start of this handoff update, local `main` and the local `origin/main` ref were synchronized at `f40dd41` on 2026-09-23; no network fetch was performed.
 
 ## Completed operational readiness probe
 
@@ -192,11 +195,26 @@ Phase 1 is operationally closed. Run `pattani-full-20260922-01` completed with 1
 
 The AES-256 backup restore was verified for 359 source files totaling 581,512,053 bytes. The Google Drive copy is Restricted. The downloaded archive matched SHA-256 `861b87c016b382d6a7dd8242d30ec430e7cce8c266a00b160033e27960caa975`, and 7-Zip reported “Everything is Ok” with exit code 0. Restored verification reported the expected `configured_key_unverified` because no API key was supplied.
 
-This is operational evidence, not an official API guarantee. It does not establish exhaustive or snapshot-consistent provider coverage. Phase 2 begins with source-contract inventory; PostGIS geometry construction and SRID assignment remain blocked pending official CRS evidence. See `docs/PHASE1_CLOSEOUT.md` for the closeout boundary.
+This is operational evidence, not an official API guarantee. It does not establish exhaustive or snapshot-consistent provider coverage. Phase 2 subsequently completed without assigning a CRS or constructing PostGIS geometry. See `docs/PHASE1_CLOSEOUT.md` for the Phase 1 closeout boundary.
+
+## Phase 2 closeout
+
+Phase 2 is complete through these reviewed implementation checkpoints:
+
+- Phase 2A source contract: commit `bf48d94`.
+- Phase 2B synthetic source validation: commit `0169c14`.
+- Phase 2C offline aggregate profiler: commit `4744caf`.
+- Phase 2D neutral deterministic transformation: commit `f40dd41`.
+
+The real Phase 2C profile of run `pattani-full-20260922-01` validated 113 pages and 112,073 features with complete credential checking and zero issues. It observed 112,073 `MultiPolygon` geometry members with none missing, null, or other, plus 40 property fields that were present and non-null in every feature. These are **Previously observed** structural results, not an official provider contract. CRS, units, meanings, field relationships, ordering, snapshot consistency, and exhaustive coverage remain unverified.
+
+Phase 2D transformation `neutral-jsonl-v1-20260923-01` produced 113 deterministic JSONL page files and one completion manifest for 112,073 records. Reported total JSONL size was `262945631` bytes. The manifest SHA-256 was `3a901d29a66d348168deb319920cce0529092580136da09bf65c496bcddb51a2`.
+
+Source verification completed with zero issues. Credential, lineage, containment, integrity, and remnant checks passed; no network request or live client construction occurred. The Git-ignored derived output is reproducible from the immutable source dataset and committed code. The project-defined schema is based on the observed snapshot and is not a GISTDA contract. No CRS assignment, reprojection, semantic interpretation, PostGIS loading, scoring, or infrastructure integration occurred.
 
 ## Locally reported verification
 
-Latest locally recorded result: **819 tests passed, 5 skipped**; `compileall` passed; whitespace and authorized-scope checks passed. The platform skips concern unavailable symlink behavior.
+Latest locally recorded result: **948 tests passed, 5 skipped**. The platform skips concern unavailable symlink behavior.
 
 These are locally reported verification results, not external proof or evidence of official API behavior.
 
@@ -213,9 +231,7 @@ These are locally reported verification results, not external proof or evidence 
 
 ## Recommended next step
 
-Begin Phase 2 with a separately reviewed source-contract inventory. Do not begin real-data profiling, transformation, database setup, PostGIS work, or another live ingestion without separate authorization.
-
-Milestone 8C itself remained offline. The completed probes and policy-based full ingestion above occurred afterward under separate explicit authorizations.
+Begin Phase 3 infrastructure data integration with source selection and official source-contract verification before downloading any data. Each infrastructure source, download, profiling step, and integration action requires separate review and authorization. Do not infer CRS, field meanings, licensing, update cadence, or compatibility with the Pattani flood source.
 
 ## Collaboration rules
 
