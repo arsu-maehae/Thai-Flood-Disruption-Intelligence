@@ -11,6 +11,7 @@ import stat
 import zipfile
 
 import pytest
+import requests
 
 from src.ingestion import infrastructure_acquisition as acquisition
 from src.ingestion.infrastructure_acquisition import (
@@ -23,6 +24,15 @@ from src.ingestion.infrastructure_acquisition import (
     DGA_CSV_RESOURCE_ID,
     DRR_CATALOG_URL,
     DRR_RESOURCE_ID,
+    GEOFABRIK_COVERAGE_LABEL,
+    GEOFABRIK_PROVIDER_LABEL,
+    GEOFABRIK_THAILAND_CATALOG_URL,
+    GEOFABRIK_THAILAND_DOWNLOAD_CAP,
+    GEOFABRIK_THAILAND_EXPECTED_BYTES,
+    GEOFABRIK_THAILAND_PBF_SPEC,
+    GEOFABRIK_THAILAND_PBF_URL,
+    GEOFABRIK_THAILAND_PROVIDER_MD5,
+    GEOFABRIK_THAILAND_RESOURCE_ID,
     acquire_resource,
     revalidate_selected_metadata,
 )
@@ -65,6 +75,16 @@ class FakeSession:
         if not self.responses:
             raise AssertionError("unexpected request")
         return self.responses.pop(0)
+
+
+class FailingSession:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def get(self, url: str, **kwargs: object) -> FakeResponse:
+        self.calls.append((url, kwargs))
+        raise self.error
 
 
 def dga_evidence() -> CandidateResourceEvidence:
@@ -131,6 +151,79 @@ def make_zip(
             else:
                 archive.writestr(name, payload)
     return target.getvalue()
+
+
+def encode_varint(value: int) -> bytes:
+    result = bytearray()
+    while True:
+        current = value & 0x7F
+        value >>= 7
+        result.append(current | (0x80 if value else 0))
+        if not value:
+            return bytes(result)
+
+
+def make_osm_pbf(blob: bytes = b"synthetic-header-block") -> bytes:
+    blob_header = (
+        b"\x0a"
+        + encode_varint(len(b"OSMHeader"))
+        + b"OSMHeader"
+        + b"\x18"
+        + encode_varint(len(blob))
+    )
+    return len(blob_header).to_bytes(4, "big") + blob_header + blob
+
+
+def synthetic_osm_spec(
+    monkeypatch: pytest.MonkeyPatch,
+    expected_content: bytes,
+    *,
+    max_bytes: int | None = None,
+) -> ApprovedResourceSpec:
+    expected_md5 = hashlib.md5(expected_content, usedforsecurity=False).hexdigest()
+    cap = max_bytes if max_bytes is not None else max(len(expected_content), 1)
+    monkeypatch.setattr(acquisition, "GEOFABRIK_THAILAND_EXPECTED_BYTES", len(expected_content))
+    monkeypatch.setattr(acquisition, "GEOFABRIK_THAILAND_PROVIDER_MD5", expected_md5)
+    monkeypatch.setattr(acquisition, "GEOFABRIK_THAILAND_DOWNLOAD_CAP", cap)
+    return replace(
+        GEOFABRIK_THAILAND_PBF_SPEC,
+        expected_bytes=len(expected_content),
+        expected_md5=expected_md5,
+        max_bytes=cap,
+    )
+
+
+def acquire_osm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    content: bytes,
+    *,
+    response_content: bytes | None = None,
+    headers: dict[str, str] | None = None,
+    content_type: str = "application/octet-stream",
+    status: int = 200,
+    max_bytes: int | None = None,
+):
+    spec = synthetic_osm_spec(monkeypatch, content, max_bytes=max_bytes)
+    body = content if response_content is None else response_content
+    session = FakeSession(
+        [
+            FakeResponse(
+                body,
+                status=status,
+                content_type=content_type,
+                headers=headers,
+            )
+        ]
+    )
+    result = acquire_resource(
+        spec,
+        session,  # type: ignore[arg-type]
+        tmp_path,
+        minimum_free_bytes=0,
+        clock=lambda: FIXED_TIME,
+    )
+    return result, session
 
 
 def mark_zip_encrypted(content: bytes) -> bytes:
@@ -250,6 +343,259 @@ def test_direct_spec_construction_cannot_bypass_exact_resource_binding(
     original = dga_spec() if base == "dga" else drr_spec(drr_url)
     with pytest.raises(ValueError, match="^resource_spec_invalid$"):
         replace(original, **changes)
+
+
+def test_geofabrik_spec_is_exact_and_immutable() -> None:
+    spec = GEOFABRIK_THAILAND_PBF_SPEC
+    assert spec.resource_id == GEOFABRIK_THAILAND_RESOURCE_ID
+    assert spec.catalog_url == GEOFABRIK_THAILAND_CATALOG_URL
+    assert spec.download_url == GEOFABRIK_THAILAND_PBF_URL
+    assert spec.expected_bytes == GEOFABRIK_THAILAND_EXPECTED_BYTES
+    assert spec.expected_md5 == GEOFABRIK_THAILAND_PROVIDER_MD5
+    assert spec.max_bytes == GEOFABRIK_THAILAND_DOWNLOAD_CAP
+    assert spec.provider_label == GEOFABRIK_PROVIDER_LABEL
+    assert spec.coverage_label == GEOFABRIK_COVERAGE_LABEL
+    with pytest.raises(ValueError, match="^resource_spec_invalid$"):
+        replace(spec, download_url="https://download.geofabrik.de/asia/other.osm.pbf")
+    with pytest.raises(ValueError, match="^resource_spec_invalid$"):
+        replace(spec, catalog_url="https://download.geofabrik.de/asia/index.html")
+
+
+def test_osm_pbf_acquisition_reconciles_hashes_bytes_and_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = make_osm_pbf()
+    result, session = acquire_osm(
+        tmp_path,
+        monkeypatch,
+        content,
+        headers={"Content-Length": str(len(content))},
+    )
+
+    sha256 = hashlib.sha256(content).hexdigest()
+    md5 = hashlib.md5(content, usedforsecurity=False).hexdigest()
+    assert result.sha256 == sha256
+    assert result.byte_count == len(content)
+    assert result.content_type == "application/octet-stream"
+    assert result.artifact_path.name == (
+        f"resource-{GEOFABRIK_THAILAND_RESOURCE_ID}__sha256-{sha256}.osm.pbf"
+    )
+    assert result.artifact_path.read_bytes() == content
+    assert result.artifact_path.parent.relative_to(tmp_path).as_posix() == (
+        "infrastructure/roads/osm/geofabrik"
+    )
+    metadata = json.loads(result.metadata_path.read_bytes())
+    assert metadata["provider"] == GEOFABRIK_PROVIDER_LABEL
+    assert metadata["coverage"] == GEOFABRIK_COVERAGE_LABEL
+    assert metadata["approved_download_url"] == GEOFABRIK_THAILAND_PBF_URL
+    assert metadata["byte_count"] == len(content)
+    assert metadata["expected_byte_count"] == len(content)
+    assert metadata["provider_md5"] == md5
+    assert metadata["sha256"] == sha256
+    assert metadata["request_count"] == 1
+    assert metadata["redirect_count"] == 0
+    assert metadata["archive_inspection"] == {
+        "applied": True,
+        "blob_header_bytes": 13,
+        "declared_first_blob_bytes": 22,
+        "extracted": False,
+        "first_blob_type": "OSMHeader",
+        "format": "osm.pbf",
+        "max_blob_header_bytes": 65536,
+        "max_declared_first_blob_bytes": 33554432,
+        "semantic_parsing_applied": False,
+    }
+    assert session.calls == [
+        (
+            GEOFABRIK_THAILAND_PBF_URL,
+            {"stream": True, "allow_redirects": False, "timeout": (10.0, 120.0)},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("resource_id", "thailand-latest.osm.pbf"),
+        ("download_url", "https://example.invalid/asia/thailand-260923.osm.pbf"),
+        ("download_url", "https://download.geofabrik.de/asia/other.osm.pbf"),
+        ("expected_bytes", 1),
+        ("expected_md5", "0" * 32),
+    ],
+)
+def test_osm_pbf_exact_binding_rejects_changes(field: str, value: object) -> None:
+    with pytest.raises(ValueError, match="^resource_spec_invalid$"):
+        replace(GEOFABRIK_THAILAND_PBF_SPEC, **{field: value})
+
+
+def test_osm_pbf_missing_content_length_is_allowed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = make_osm_pbf()
+    result, _ = acquire_osm(tmp_path, monkeypatch, content)
+    assert result.byte_count == len(content)
+
+
+@pytest.mark.parametrize(
+    ("headers", "category"),
+    [
+        ({"Content-Length": "invalid"}, "content_length_invalid"),
+        ({"Content-Length": "1000"}, "download_too_large"),
+    ],
+)
+def test_osm_pbf_invalid_or_oversized_declared_length_is_rejected_before_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    headers: dict[str, str],
+    category: str,
+) -> None:
+    content = make_osm_pbf()
+    spec = synthetic_osm_spec(monkeypatch, content)
+
+    class UnreadableResponse(FakeResponse):
+        def iter_content(self, chunk_size: int = 1) -> object:
+            raise AssertionError("body must not be read")
+
+    session = FakeSession(
+        [
+            UnreadableResponse(
+                content,
+                content_type="application/octet-stream",
+                headers=headers,
+            )
+        ]
+    )
+    with pytest.raises(AcquisitionError, match=f"^{category}$"):
+        acquire_resource(
+            spec,
+            session,  # type: ignore[arg-type]
+            tmp_path,
+            minimum_free_bytes=0,
+            clock=lambda: FIXED_TIME,
+        )
+
+
+def test_osm_pbf_declared_exact_length_mismatch_is_rejected_before_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = make_osm_pbf()
+    spec = synthetic_osm_spec(monkeypatch, content)
+
+    class UnreadableResponse(FakeResponse):
+        def iter_content(self, chunk_size: int = 1) -> object:
+            raise AssertionError("body must not be read")
+
+    session = FakeSession(
+        [
+            UnreadableResponse(
+                content,
+                content_type="application/octet-stream",
+                headers={"Content-Length": str(len(content) - 1)},
+            )
+        ]
+    )
+    with pytest.raises(AcquisitionError, match="^content_length_mismatch$"):
+        acquire_resource(
+            spec,
+            session,  # type: ignore[arg-type]
+            tmp_path,
+            minimum_free_bytes=0,
+            clock=lambda: FIXED_TIME,
+        )
+
+
+def test_osm_pbf_streaming_cap_is_enforced_without_declared_length(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    expected = make_osm_pbf(b"a")
+    response = expected + b"overflow"
+    spec = synthetic_osm_spec(monkeypatch, expected, max_bytes=len(expected))
+    session = FakeSession(
+        [FakeResponse(response, content_type="application/octet-stream")]
+    )
+    with pytest.raises(AcquisitionError, match="^download_too_large$"):
+        acquire_resource(
+            spec,
+            session,  # type: ignore[arg-type]
+            tmp_path,
+            minimum_free_bytes=0,
+            clock=lambda: FIXED_TIME,
+        )
+
+
+def test_osm_pbf_wrong_length_checksum_type_and_redirect_are_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = make_osm_pbf()
+    cases = (
+        (content[:-1], "application/octet-stream", 200, "download_length_mismatch"),
+        (content[:-1] + b"x", "application/octet-stream", 200, "provider_checksum_mismatch"),
+        (content, "text/plain", 200, "download_content_type_rejected"),
+        (content, "application/octet-stream", 302, "download_redirect_rejected"),
+    )
+    for index, (body, content_type, status, category) in enumerate(cases):
+        case_root = tmp_path / str(index)
+        with pytest.raises(AcquisitionError, match=f"^{category}$"):
+            acquire_osm(
+                case_root,
+                monkeypatch,
+                content,
+                response_content=body,
+                content_type=content_type,
+                status=status,
+            )
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b"\x00",
+        b"\x00\x00\x00\x10short",
+        make_osm_pbf().replace(b"OSMHeader", b"OSMData__", 1),
+    ],
+)
+def test_osm_pbf_invalid_or_truncated_header_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, content: bytes
+) -> None:
+    spec = synthetic_osm_spec(monkeypatch, content)
+    with pytest.raises(AcquisitionError, match="^pbf_header_rejected$"):
+        acquire_resource(
+            spec,
+            FakeSession(
+                [FakeResponse(content, content_type="application/octet-stream")]
+            ),  # type: ignore[arg-type]
+            tmp_path,
+            minimum_free_bytes=0,
+            clock=lambda: FIXED_TIME,
+        )
+    destination = tmp_path / "infrastructure/roads/osm/geofabrik"
+    assert not destination.exists() or list(destination.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("error", "category"),
+    [
+        (requests.Timeout("private timeout"), "download_timeout"),
+        (requests.ConnectionError("private connection"), "download_connection_failed"),
+    ],
+)
+def test_osm_pbf_request_failures_are_safe_and_publish_nothing(
+    tmp_path: Path,
+    error: Exception,
+    category: str,
+) -> None:
+    session = FailingSession(error)
+    with pytest.raises(AcquisitionError, match=f"^{category}$") as caught:
+        acquire_resource(
+            GEOFABRIK_THAILAND_PBF_SPEC,
+            session,  # type: ignore[arg-type]
+            tmp_path,
+            minimum_free_bytes=0,
+            clock=lambda: FIXED_TIME,
+        )
+    assert "private" not in str(caught.value) + repr(caught.value)
+    assert len(session.calls) == 1
+    assert not list(tmp_path.rglob("*.pbf"))
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])

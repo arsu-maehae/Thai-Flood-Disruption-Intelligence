@@ -41,6 +41,16 @@ DGA_ZIP_DOWNLOAD_URL = (
     "https://data.go.th/dataset/00170665-bda1-4f4a-ad7c-52dac7abc7a5/"
     f"resource/{DGA_ZIP_RESOURCE_ID}/download/citizeninfo_health_20200314.zip"
 )
+GEOFABRIK_THAILAND_RESOURCE_ID = "thailand-260923.osm.pbf"
+GEOFABRIK_THAILAND_CATALOG_URL = "https://download.geofabrik.de/asia/thailand.html"
+GEOFABRIK_THAILAND_PBF_URL = (
+    "https://download.geofabrik.de/asia/thailand-260923.osm.pbf"
+)
+GEOFABRIK_THAILAND_EXPECTED_BYTES = 327_676_785
+GEOFABRIK_THAILAND_PROVIDER_MD5 = "4558c600b0e70e355c4436bd3ca80ac9"
+GEOFABRIK_THAILAND_DOWNLOAD_CAP = 419_430_400
+GEOFABRIK_PROVIDER_LABEL = "OpenStreetMap data distributed by Geofabrik"
+GEOFABRIK_COVERAGE_LABEL = "Thailand"
 
 METADATA_RESPONSE_LIMIT = 2 * 1024 * 1024
 DEFAULT_METADATA_TIMEOUT = (10.0, 30.0)
@@ -54,6 +64,9 @@ _CREDENTIAL_NAMES = frozenset({"api_key", "api-key", "authorization"})
 _ZIP_NESTED_SUFFIXES = (
     ".zip", ".7z", ".rar", ".tar", ".tgz", ".gz", ".bz2", ".xz",
 )
+_MD5 = re.compile(r"^[0-9a-f]{32}$")
+_PBF_HEADER_MAX_BYTES = 64 * 1024
+_PBF_BLOB_MAX_BYTES = 32 * 1024 * 1024
 
 
 class _Response(Protocol):
@@ -156,6 +169,10 @@ class ApprovedResourceSpec:
     max_bytes: int
     approval_reference: str
     archive_limits: ArchiveLimits | None = None
+    expected_bytes: int | None = None
+    expected_md5: str | None = None
+    provider_label: str | None = None
+    coverage_label: str | None = None
 
     @classmethod
     def approve(
@@ -182,11 +199,17 @@ class ApprovedResourceSpec:
         )
 
     def __post_init__(self) -> None:
-        if self.source_key not in {"drr_roads", "dga_healthcare"}:
+        if self.source_key not in {
+            "drr_roads",
+            "dga_healthcare",
+            "geofabrik_osm_roads",
+        }:
             raise ValueError("resource_spec_invalid")
-        if not _UUID.fullmatch(self.resource_id):
+        if self.source_key != "geofabrik_osm_roads" and not _UUID.fullmatch(
+            self.resource_id
+        ):
             raise ValueError("resource_spec_invalid")
-        if self.expected_format not in {"csv", "zip"}:
+        if self.expected_format not in {"csv", "zip", "osm.pbf"}:
             raise ValueError("resource_spec_invalid")
         if self.source_key == "drr_roads":
             try:
@@ -207,6 +230,19 @@ class ApprovedResourceSpec:
             or self.download_url != DGA_CSV_DOWNLOAD_URL
         ):
             raise ValueError("resource_spec_invalid")
+        if self.source_key == "geofabrik_osm_roads" and (
+            self.resource_id != GEOFABRIK_THAILAND_RESOURCE_ID
+            or self.catalog_url != GEOFABRIK_THAILAND_CATALOG_URL
+            or self.download_url != GEOFABRIK_THAILAND_PBF_URL
+            or self.expected_format != "osm.pbf"
+            or self.approved_media_types != ("application/octet-stream",)
+            or self.max_bytes != GEOFABRIK_THAILAND_DOWNLOAD_CAP
+            or self.expected_bytes != GEOFABRIK_THAILAND_EXPECTED_BYTES
+            or self.expected_md5 != GEOFABRIK_THAILAND_PROVIDER_MD5
+            or self.provider_label != GEOFABRIK_PROVIDER_LABEL
+            or self.coverage_label != GEOFABRIK_COVERAGE_LABEL
+        ):
+            raise ValueError("resource_spec_invalid")
         _validate_official_url(self.catalog_url, self.source_key)
         _validate_official_url(self.download_url, self.source_key)
         if isinstance(self.max_bytes, bool) or not isinstance(self.max_bytes, int) or self.max_bytes <= 0:
@@ -221,12 +257,35 @@ class ApprovedResourceSpec:
         format_media_types = {
             "csv": {"text/csv", "application/csv"},
             "zip": {"application/zip", "application/x-zip-compressed"},
+            "osm.pbf": {"application/octet-stream"},
         }
         if not set(normalized).issubset(format_media_types[self.expected_format]):
             raise ValueError("resource_spec_invalid")
         if self.expected_format == "zip" and self.archive_limits is None:
             raise ValueError("resource_spec_invalid")
-        if self.expected_format == "csv" and self.archive_limits is not None:
+        if self.expected_format != "zip" and self.archive_limits is not None:
+            raise ValueError("resource_spec_invalid")
+        if self.expected_bytes is not None and (
+            isinstance(self.expected_bytes, bool)
+            or not isinstance(self.expected_bytes, int)
+            or self.expected_bytes <= 0
+            or self.expected_bytes > self.max_bytes
+        ):
+            raise ValueError("resource_spec_invalid")
+        if self.expected_md5 is not None and (
+            not isinstance(self.expected_md5, str)
+            or not _MD5.fullmatch(self.expected_md5)
+        ):
+            raise ValueError("resource_spec_invalid")
+        if self.source_key != "geofabrik_osm_roads" and any(
+            value is not None
+            for value in (
+                self.expected_bytes,
+                self.expected_md5,
+                self.provider_label,
+                self.coverage_label,
+            )
+        ):
             raise ValueError("resource_spec_invalid")
 
 
@@ -388,7 +447,10 @@ def acquire_resource(
         declared_length = _declared_length(response.headers)
         if declared_length is not None and declared_length > spec.max_bytes:
             raise AcquisitionError("download_too_large", request_count=1)
-        temporary_path, digest, byte_count = _stream_to_temporary(
+        if spec.expected_bytes is not None and declared_length is not None:
+            if declared_length != spec.expected_bytes:
+                raise AcquisitionError("content_length_mismatch", request_count=1)
+        temporary_path, digest, provider_md5, byte_count = _stream_to_temporary(
             response, destination, spec.max_bytes
         )
     finally:
@@ -405,19 +467,23 @@ def acquire_resource(
                 ) from None
 
     try:
-        archive_summary = (
-            _inspect_zip_safely(temporary_path, spec.archive_limits)
-            if spec.expected_format == "zip"
-            else {"applied": False}
-        )
-        extension = ".zip" if spec.expected_format == "zip" else ".csv"
+        if spec.expected_bytes is not None and byte_count != spec.expected_bytes:
+            raise AcquisitionError("download_length_mismatch", request_count=1)
+        if spec.expected_md5 is not None and provider_md5 != spec.expected_md5:
+            raise AcquisitionError("provider_checksum_mismatch", request_count=1)
+        archive_summary = _inspection_summary(temporary_path, spec)
+        extension = {
+            "zip": ".zip",
+            "csv": ".csv",
+            "osm.pbf": ".osm.pbf",
+        }[spec.expected_format]
         stem = f"resource-{spec.resource_id}__sha256-{digest}"
         artifact_path = destination / f"{stem}{extension}"
         metadata_path = destination / f"{stem}.metadata.json"
         relative_artifact = artifact_path.relative_to(root).as_posix()
-        metadata = {
+        metadata: dict[str, object] = {
             "schema_version": ACQUISITION_METADATA_SCHEMA_VERSION,
-            "provider": spec.source_key,
+            "provider": spec.provider_label or spec.source_key,
             "resource_id": spec.resource_id,
             "catalog_url": spec.catalog_url,
             "approved_download_url": spec.download_url,
@@ -433,6 +499,18 @@ def acquire_resource(
             "max_bytes": spec.max_bytes,
             "archive_inspection": archive_summary,
         }
+        if spec.source_key == "geofabrik_osm_roads":
+            metadata.update(
+                {
+                    "source_key": spec.source_key,
+                    "coverage": spec.coverage_label,
+                    "provider_md5": provider_md5,
+                    "provider_md5_role": (
+                        "provider integrity evidence; not cryptographic authenticity"
+                    ),
+                    "expected_byte_count": spec.expected_bytes,
+                }
+            )
         metadata_bytes = _json_bytes(metadata)
         reuse = _verify_reusable_pair(
             artifact_path, metadata_path, metadata, root
@@ -503,7 +581,12 @@ def _validate_official_url(value: str, source_key: str) -> None:
         parsed = urlsplit(value)
     except ValueError:
         raise ValueError("resource_spec_invalid") from None
-    expected_host = "datagov.mot.go.th" if source_key == "drr_roads" else "data.go.th"
+    expected_hosts = {
+        "drr_roads": "datagov.mot.go.th",
+        "dga_healthcare": "data.go.th",
+        "geofabrik_osm_roads": "download.geofabrik.de",
+    }
+    expected_host = expected_hosts.get(source_key)
     if (
         parsed.scheme != "https"
         or parsed.hostname != expected_host
@@ -526,6 +609,22 @@ def _parse_media_type(value: object) -> str:
     if media_type != raw_type or not _MEDIA_TYPE_TOKEN.fullmatch(media_type):
         raise ValueError("content_type_invalid")
     return media_type
+
+
+GEOFABRIK_THAILAND_PBF_SPEC = ApprovedResourceSpec(
+    source_key="geofabrik_osm_roads",
+    resource_id=GEOFABRIK_THAILAND_RESOURCE_ID,
+    catalog_url=GEOFABRIK_THAILAND_CATALOG_URL,
+    download_url=GEOFABRIK_THAILAND_PBF_URL,
+    expected_format="osm.pbf",
+    approved_media_types=("application/octet-stream",),
+    max_bytes=GEOFABRIK_THAILAND_DOWNLOAD_CAP,
+    approval_reference="phase3b-osm-contract-20260924",
+    expected_bytes=GEOFABRIK_THAILAND_EXPECTED_BYTES,
+    expected_md5=GEOFABRIK_THAILAND_PROVIDER_MD5,
+    provider_label=GEOFABRIK_PROVIDER_LABEL,
+    coverage_label=GEOFABRIK_COVERAGE_LABEL,
+)
 
 
 def _response_media_type(response: _Response, *, request_count: int) -> str:
@@ -565,10 +664,11 @@ def _read_limited(
 
 def _stream_to_temporary(
     response: _Response, destination: Path, limit: int
-) -> tuple[Path, str, int]:
+) -> tuple[Path, str, str, int]:
     temporary: tempfile._TemporaryFileWrapper[bytes] | None = None
     path: Path | None = None
     digest = hashlib.sha256()
+    provider_digest = hashlib.md5(usedforsecurity=False)
     total = 0
     try:
         temporary = tempfile.NamedTemporaryFile(
@@ -587,6 +687,7 @@ def _stream_to_temporary(
                     raise AcquisitionError("download_too_large", request_count=1)
                 temporary.write(chunk)
                 digest.update(chunk)
+                provider_digest.update(chunk)
             temporary.flush()
             os.fsync(temporary.fileno())
         finally:
@@ -608,7 +709,101 @@ def _stream_to_temporary(
         ) from None
     if path is None:
         raise AcquisitionError("temporary_write_failed", request_count=1)
-    return path, digest.hexdigest(), total
+    return path, digest.hexdigest(), provider_digest.hexdigest(), total
+
+
+def _inspection_summary(
+    path: Path, spec: ApprovedResourceSpec
+) -> dict[str, object]:
+    if spec.expected_format == "zip":
+        return _inspect_zip_safely(path, spec.archive_limits)
+    if spec.expected_format == "osm.pbf":
+        return _inspect_osm_pbf_header(path)
+    return {"applied": False}
+
+
+def _inspect_osm_pbf_header(path: Path) -> dict[str, object]:
+    """Validate only the bounded first BlobHeader and declared blob length."""
+
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            raw_length = handle.read(4)
+            if len(raw_length) != 4:
+                raise AcquisitionError("pbf_header_rejected", request_count=1)
+            header_length = int.from_bytes(raw_length, "big")
+            if not 0 < header_length <= _PBF_HEADER_MAX_BYTES:
+                raise AcquisitionError("pbf_header_rejected", request_count=1)
+            header = handle.read(header_length)
+            if len(header) != header_length:
+                raise AcquisitionError("pbf_header_rejected", request_count=1)
+        blob_type, blob_size = _parse_pbf_blob_header(header)
+        if (
+            blob_type != b"OSMHeader"
+            or blob_size is None
+            or not 0 < blob_size <= _PBF_BLOB_MAX_BYTES
+            or size < 4 + header_length + blob_size
+        ):
+            raise AcquisitionError("pbf_header_rejected", request_count=1)
+    except AcquisitionError:
+        raise
+    except (OSError, ValueError):
+        raise AcquisitionError("pbf_header_rejected", request_count=1) from None
+    return {
+        "applied": True,
+        "format": "osm.pbf",
+        "first_blob_type": "OSMHeader",
+        "blob_header_bytes": header_length,
+        "declared_first_blob_bytes": blob_size,
+        "max_blob_header_bytes": _PBF_HEADER_MAX_BYTES,
+        "max_declared_first_blob_bytes": _PBF_BLOB_MAX_BYTES,
+        "semantic_parsing_applied": False,
+        "extracted": False,
+    }
+
+
+def _parse_pbf_blob_header(data: bytes) -> tuple[bytes | None, int | None]:
+    position = 0
+    blob_type: bytes | None = None
+    blob_size: int | None = None
+    while position < len(data):
+        tag, position = _read_pbf_varint(data, position)
+        field = tag >> 3
+        wire = tag & 7
+        if wire == 0:
+            value, position = _read_pbf_varint(data, position)
+            if field == 3:
+                blob_size = value
+        elif wire == 2:
+            length, position = _read_pbf_varint(data, position)
+            end = position + length
+            if end > len(data):
+                raise ValueError("truncated")
+            if field == 1:
+                blob_type = data[position:end]
+            position = end
+        elif wire == 1:
+            position += 8
+        elif wire == 5:
+            position += 4
+        else:
+            raise ValueError("wire")
+        if position > len(data):
+            raise ValueError("truncated")
+    return blob_type, blob_size
+
+
+def _read_pbf_varint(data: bytes, position: int) -> tuple[int, int]:
+    value = 0
+    for shift in range(0, 70, 7):
+        if position >= len(data):
+            raise ValueError("truncated")
+        byte = data[position]
+        position += 1
+        value |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return value, position
+    raise ValueError("varint")
 
 
 def _inspect_zip_safely(path: Path, limits: ArchiveLimits | None) -> dict[str, object]:
@@ -865,11 +1060,15 @@ def _declared_length(headers: Mapping[str, str]) -> int | None:
 
 
 def _destination_parts(source_key: str) -> Path:
-    return (
-        Path("infrastructure/roads/drr")
-        if source_key == "drr_roads"
-        else Path("infrastructure/healthcare/dga")
-    )
+    destinations = {
+        "drr_roads": Path("infrastructure/roads/drr"),
+        "dga_healthcare": Path("infrastructure/healthcare/dga"),
+        "geofabrik_osm_roads": Path("infrastructure/roads/osm/geofabrik"),
+    }
+    try:
+        return destinations[source_key]
+    except KeyError:
+        raise AcquisitionError("approved_resource_required") from None
 
 
 def _validate_destination_containment(root: Path, destination: Path) -> None:
