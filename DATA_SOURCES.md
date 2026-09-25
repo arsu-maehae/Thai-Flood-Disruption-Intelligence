@@ -216,3 +216,29 @@ The project must not assume that `freq` equals the sum of any yearly fields unle
 | Population | Exposure estimation | Not yet verified | Not yet verified | Yes | Yes | Later phase |
 | Weather | ML features | Not yet verified | Not yet verified | Yes | Yes | Later phase |
 | Elevation | Geographic feature | Not yet verified | Not yet verified | Yes | No | Later phase |
+
+## Phase 3 infrastructure preparation
+
+Completed on **2026-09-25 UTC** as project execution evidence:
+
+- A dated Geofabrik Thailand OSM PBF was acquired and verified at `327676785`
+  bytes, MD5 `4558c600b0e70e355c4436bd3ca80ac9`, and SHA-256
+  `fc4117130af85c248c24376ba81bc593698d415f70907a994cd6813793e44b13`.
+- The observed Pattani administrative boundary assembled as a valid, closed
+  `MultiPolygon`. Offline extraction selected 32,324 ways with observed
+  `highway` categories and produced 32,358 clipped line segments; JSONL SHA-256
+  was `39a0ed9fed549e32bcf949d9cefb264ab50c957091e46698a57fc8775a372484`.
+- The DGA healthcare CSV was acquired and verified. A project-defined literal
+  address-text policy produced 138 Pattani candidates; JSONL SHA-256 was
+  `52d87273475d9022a3656804428e0f1adfa556b8b542e1ed45694df1d7c7fb7a`.
+- The DRR direct download URL remains unresolved and no DRR dataset was
+  downloaded.
+- Shared offline verification reported zero issues for both derived outputs.
+
+These are observed/project results, not official completeness, accessibility,
+facility-status, or positional-accuracy guarantees. OSM/OSMF licensing and
+attribution/share-alike requirements apply; no legal conclusion is offered.
+Official OSM documentation provides coordinate-reference evidence for OSM, but
+the official GISTDA and DGA pages inspected did not establish explicit CRS
+contracts. Spatial overlay remains blocked; see
+`docs/SPATIAL_REFERENCE_CONTRACT.md`.

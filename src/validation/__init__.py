@@ -21,6 +21,10 @@ from .flood_profile import (
     ValidatedProfilePage,
     profile_validated_pages,
 )
+from .infrastructure_outputs import (
+    InfrastructureVerificationResult,
+    verify_infrastructure_output,
+)
 
 __all__ = [
     "PageValidationResult",
@@ -40,4 +44,6 @@ __all__ = [
     "PropertyFieldProfile",
     "ValidatedProfilePage",
     "profile_validated_pages",
+    "InfrastructureVerificationResult",
+    "verify_infrastructure_output",
 ]

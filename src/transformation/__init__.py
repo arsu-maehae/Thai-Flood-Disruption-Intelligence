@@ -11,6 +11,27 @@ from .flood_frequency import (
     publish_transformed_run,
     transform_validated_page,
 )
+from .osm_roads import (
+    DEFAULT_TRANSFORMATION_ID as OSM_ROAD_TRANSFORMATION_ID,
+    PATTANI_BOUNDARY_CONTRACT,
+    ROAD_POLICY_VERSION,
+    ROAD_SCHEMA_VERSION,
+    BoundaryContract,
+    RoadExtractionError,
+    RoadExtractionResult,
+    RoadSource,
+    extract_pattani_osm_roads,
+    geofabrik_thailand_source,
+)
+from .healthcare_candidates import (
+    DEFAULT_TRANSFORMATION_ID as HEALTHCARE_TRANSFORMATION_ID,
+    HEALTHCARE_POLICY_VERSION,
+    HEALTHCARE_SCHEMA_VERSION,
+    HealthcareTransformationError,
+    HealthcareTransformationResult,
+    dga_healthcare_source,
+    extract_pattani_healthcare_candidates,
+)
 
 __all__ = [
     "TRANSFORMATION_POLICY_VERSION",
@@ -22,4 +43,21 @@ __all__ = [
     "ValidatedTransformationPage",
     "publish_transformed_run",
     "transform_validated_page",
+    "OSM_ROAD_TRANSFORMATION_ID",
+    "PATTANI_BOUNDARY_CONTRACT",
+    "ROAD_POLICY_VERSION",
+    "ROAD_SCHEMA_VERSION",
+    "BoundaryContract",
+    "RoadExtractionError",
+    "RoadExtractionResult",
+    "RoadSource",
+    "extract_pattani_osm_roads",
+    "geofabrik_thailand_source",
+    "HEALTHCARE_TRANSFORMATION_ID",
+    "HEALTHCARE_POLICY_VERSION",
+    "HEALTHCARE_SCHEMA_VERSION",
+    "HealthcareTransformationError",
+    "HealthcareTransformationResult",
+    "dga_healthcare_source",
+    "extract_pattani_healthcare_candidates",
 ]

@@ -214,7 +214,7 @@ Source verification completed with zero issues. Credential, lineage, containment
 
 ## Locally reported verification
 
-Latest locally recorded result: **948 tests passed, 5 skipped**. The platform skips concern unavailable symlink behavior.
+Latest locally recorded result: **1017 tests passed, 8 skipped**. The platform skips concern unavailable link behavior.
 
 These are locally reported verification results, not external proof or evidence of official API behavior.
 
@@ -229,9 +229,38 @@ These are locally reported verification results, not external proof or evidence 
 - `pv_idn=94` remains observed project configuration, not an officially documented Pattani mapping.
 - Operator readiness does not guarantee exhaustive or snapshot-consistent data.
 
+## Phase 3 infrastructure preparation
+
+Phase 3 completed locally on 2026-09-25. The verified dated Geofabrik source
+produced 32,324 selected OSM ways and 32,358 clipped road segments. The verified
+DGA source produced 138 address-text healthcare candidates. Both immutable,
+Git-ignored outputs passed the shared read-only infrastructure verifier with
+zero issues.
+
+The DRR direct download URL remains unresolved and no DRR dataset was
+downloaded. The observed OSM `highway` categories are not classifications of
+drivability, access, condition, or completeness. Healthcare candidates are not
+verified facilities or complete coverage. ODbL attribution/share-alike
+requirements require downstream review; no legal conclusion is made.
+
+Official OSM documentation supplies coordinate-reference evidence for the OSM
+source. Official GISTDA and DGA documentation inspected did not establish the
+CRS contracts needed for spatial overlay. Phase 4 remains blocked as specified
+in `docs/SPATIAL_REFERENCE_CONTRACT.md`.
+
 ## Recommended next step
 
-Begin Phase 3 infrastructure data integration with source selection and official source-contract verification before downloading any data. Each infrastructure source, download, profiling step, and integration action requires separate review and authorization. Do not infer CRS, field meanings, licensing, update cadence, or compatibility with the Pattani flood source.
+Phase 3 infrastructure preparation is complete. The dated Geofabrik source and
+DGA healthcare source produced immutable, verified Pattani road and healthcare
+candidate outputs; the shared verifier reported zero issues. See
+`docs/PHASE3_CLOSEOUT.md`, `docs/PATTANI_OSM_ROAD_EXTRACTION.md`, and
+`docs/PATTANI_HEALTHCARE_CANDIDATES.md`.
+
+Phase 4 spatial integration is blocked until the GISTDA and DGA coordinate
+reference contracts are resolved or a separately reviewed source-specific
+validation policy is approved. Do not infer CRS/SRID, infrastructure
+completeness, road accessibility, facility status, or positional accuracy. See
+`docs/SPATIAL_REFERENCE_CONTRACT.md`.
 
 ## Collaboration rules
 
