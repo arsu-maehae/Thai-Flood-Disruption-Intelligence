@@ -69,3 +69,16 @@ pytest
 The guarded operator provides network-free `preflight` and `verify` commands and a separately authorized `run` command. Phase 1 supports only this repository's `data/raw` output root. A live run requires explicit user authorization as well as both runtime safeguards; successful preflight alone is not authorization.
 
 See [Pattani Ingestion Operations](docs/INGESTION_OPERATIONS.md) for parameter selection, commands, failure handling, verification, and current limitations. Do not begin full ingestion without separate approval.
+
+## Verified offline exposure report
+
+Phase 4C publishes a deterministic, self-contained exploratory report at
+`data/processed/reports/pattani/exploratory-exposure-report-v1-20260927-01/index.html`.
+It works locally without a server or internet connection and contains only
+verified Phase 4A/4B aggregates. It intentionally contains no geographic map
+because official GISTDA and DGA CRS remain unresolved.
+
+The report is not a disruption, risk, severity, accessibility, prediction,
+emergency-response, or completeness product. See
+[Verified Offline Pattani Exposure Report](docs/EXPLORATORY_EXPOSURE_REPORT.md)
+for provenance, hashes, aggregate results, and interpretation limits.

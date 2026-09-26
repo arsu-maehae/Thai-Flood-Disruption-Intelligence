@@ -1,6 +1,6 @@
 # Project Handoff
 
-This document captures the project state reviewed on 2026-09-23. Recheck Git status and tests before continuing; this is a handoff snapshot, not a replacement for the project specification or API evidence.
+This document captures the project state reviewed on 2026-09-27. Recheck Git status and tests before continuing; this is a handoff snapshot, not a replacement for the project specification or API evidence.
 
 ## Goal and current scope
 
@@ -125,7 +125,7 @@ The operating procedure is documented in `docs/INGESTION_OPERATIONS.md`.
 - Branch: `main`
 - Published Phase 4A checkpoint: `1c7f500 Add exploratory Pattani flood exposure analysis`.
 - Repository: `arsu-maehae/Thai-Flood-Disruption-Intelligence`
-- Before the Phase 4B local commit, local `main` and `origin/main` were synchronized at `1c7f500` on 2026-09-27.
+- Phase 4B commit `6e9f34d Add exploratory temporal exposure analysis` was pushed, and local `main` and `origin/main` were synchronized at that commit before Phase 4C work on 2026-09-27.
 
 ## Completed operational readiness probe
 
@@ -214,7 +214,7 @@ Source verification completed with zero issues. Credential, lineage, containment
 
 ## Locally reported verification
 
-Latest locally recorded result: **1037 tests passed, 8 skipped**. The platform skips concern unavailable link behavior.
+Latest locally recorded result: **1047 tests passed, 8 skipped**. The platform skips concern unavailable link behavior.
 
 These are locally reported verification results, not external proof or evidence of official API behavior.
 
@@ -304,3 +304,24 @@ non-authoritative; see `docs/EXPLORATORY_TEMPORAL_EXPOSURE.md`.
 Phase 4C scoring, ranking, or operational use requires a separate decision gate
 covering official CRS evidence, temporal and field semantics, completeness,
 positional accuracy, and the intended decision context.
+
+## Phase 4C verified offline exposure report
+
+Phase 4C completed offline on 2026-09-27. Report
+`exploratory-exposure-report-v1-20260927-01` presents the verified Phase 4A and
+4B aggregates in one deterministic, self-contained HTML file with accessible
+tables and separately scaled road and healthcare charts. Its read-only verifier
+reported complete with zero issues.
+
+The report records 32,358 road segments (4,919 ever exposed) and 138 healthcare
+candidates (18 ever exposed), the 2011–2024 annual series, observed road-category
+aggregates, and the all-feature `freq` consistency observation. Its manifest was
+published last and reconciles both verified input manifests plus the report
+hashes and byte counts. Generated files remain immutable, Git-ignored, and
+unstaged; see `docs/EXPLORATORY_EXPOSURE_REPORT.md`.
+
+No map is included because official GISTDA and DGA CRS remain unresolved. The
+report does not establish disruption, risk, severity, accessibility,
+prediction, emergency-response value, completeness, field semantics, positional
+accuracy, temporal alignment, or snapshot consistency. Any operational product,
+scoring, or ranking requires a separately reviewed evidence and decision gate.
