@@ -123,9 +123,9 @@ The operating procedure is documented in `docs/INGESTION_OPERATIONS.md`.
 ## GitHub state
 
 - Branch: `main`
-- Published Phase 3 checkpoint: `b80c0be Complete Pattani infrastructure preparation`.
+- Published Phase 4A checkpoint: `1c7f500 Add exploratory Pattani flood exposure analysis`.
 - Repository: `arsu-maehae/Thai-Flood-Disruption-Intelligence`
-- Before the Phase 4A local commit, local `main` and `origin/main` were synchronized at `b80c0be` on 2026-09-26.
+- Before the Phase 4B local commit, local `main` and `origin/main` were synchronized at `1c7f500` on 2026-09-27.
 
 ## Completed operational readiness probe
 
@@ -214,7 +214,7 @@ Source verification completed with zero issues. Credential, lineage, containment
 
 ## Locally reported verification
 
-Latest locally recorded result: **1027 tests passed, 8 skipped**. The platform skips concern unavailable link behavior.
+Latest locally recorded result: **1037 tests passed, 8 skipped**. The platform skips concern unavailable link behavior.
 
 These are locally reported verification results, not external proof or evidence of official API behavior.
 
@@ -287,3 +287,20 @@ not a disruption or risk score and does not establish an official GISTDA or DGA
 CRS, temporal alignment, completeness, access, severity, or source-field
 semantics. Phase 4B requires a separate decision gate; see
 `docs/EXPLORATORY_FLOOD_EXPOSURE.md`.
+
+## Phase 4B exploratory temporal exposure
+
+Phase 4B completed offline on 2026-09-27. All 112,073 flood features had valid
+binary `y_2011` through `y_2024` values. The observed structural equality
+between `freq` and their sum matched all features with zero mismatches or
+invalid records; this is not an official semantic contract.
+
+Annual geometric-intersection aggregation counted each infrastructure record
+once per year and reconciled its union with Phase 4A: 4,919 road segments and
+18 healthcare candidates were ever exposed. The immutable output verifier
+reported complete with zero issues. Results remain exploratory and
+non-authoritative; see `docs/EXPLORATORY_TEMPORAL_EXPOSURE.md`.
+
+Phase 4C scoring, ranking, or operational use requires a separate decision gate
+covering official CRS evidence, temporal and field semantics, completeness,
+positional accuracy, and the intended decision context.

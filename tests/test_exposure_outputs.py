@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from src.validation.exposure_outputs import verify_exposure_output
+from src.validation.exposure_outputs import verify_exposure_output, verify_temporal_exposure_output
 
 
 def _json(value: object) -> bytes:
@@ -54,3 +54,39 @@ def test_incomplete_unexpected_and_temporary_outputs(tmp_path: Path) -> None:
     (directory / ".left.tmp").write_bytes(b""); (directory / "extra").write_bytes(b"")
     issues = verify_exposure_output(tmp_path / "second", relative).issue_categories
     assert "temporary_remnant" in issues and "unexpected_entry" in issues
+
+
+def _temporal(root: Path) -> str:
+    relative = "analysis/temporal"; directory = root / relative; directory.mkdir(parents=True)
+    years = [f"y_{year}" for year in range(2011, 2025)]
+    inputs = {}
+    for name in ("phase4a", "flood", "roads", "healthcare"):
+        path = root / f"inputs/{name}-temporal.json"; path.parent.mkdir(exist_ok=True); path.write_bytes(_json({"safe": name}))
+        inputs[name] = {"manifest_relative_path": path.relative_to(root).as_posix(),
+                        "manifest_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    summary = {"policy_label": "exploratory_non_authoritative", "years": years,
+               "phase4a_reconciled": True, "road_total": 2, "healthcare_total": 1,
+               "road_ever_exposed": 1, "healthcare_ever_exposed": 1,
+               "annual_road_exposed": {year: (1 if index == 0 else 0) for index, year in enumerate(years)},
+               "annual_healthcare_exposed": {year: (1 if index == 0 else 0) for index, year in enumerate(years)}}
+    files = {"annual_exposure_summary.json": _json(summary),
+             "frequency_consistency.json": _json({"feature_count": 2, "match_count": 1, "mismatch_count": 1,
+                 "missing_or_invalid_count": 0, "per_year_active_feature_counts": {year: 0 for year in years}}),
+             "road_category_annual_exposure.csv": (",".join(["highway_category", *years, "ever_exposed", "total_records"]) + "\nprimary,1," + ",".join(["0"] * 13) + ",1,2\n").encode(),
+             "healthcare_annual_exposure.csv": (",".join(["scope", *years, "ever_exposed", "total_records"]) + "\naddress_text_candidates,1," + ",".join(["0"] * 13) + ",1,1\n").encode()}
+    outputs = {}
+    for name, content in files.items():
+        (directory / name).write_bytes(content); outputs[name] = {"relative_path": name, "byte_count": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(), "record_count": 1}
+    manifest = {"schema_version": "1.0", "policy_version": "exploratory_non_authoritative",
+                "status": "complete", "inputs": inputs, "outputs": outputs}
+    (directory / "analysis_manifest.json").write_bytes(_json(manifest)); return relative
+
+
+def test_temporal_verifier_is_read_only_and_rejects_tampering(tmp_path: Path) -> None:
+    relative = _temporal(tmp_path); before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    result = verify_temporal_exposure_output(tmp_path, relative)
+    assert result.complete and result.road_count == 2 and result.healthcare_count == 1
+    assert before == {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    path = tmp_path / relative / "healthcare_annual_exposure.csv"; path.write_bytes(path.read_bytes() + b"bad")
+    assert "integrity_failed" in verify_temporal_exposure_output(tmp_path, relative).issue_categories

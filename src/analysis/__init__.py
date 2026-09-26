@@ -15,3 +15,19 @@ __all__ = [
     "compute_exposure",
     "run_exploratory_exposure",
 ]
+
+from .temporal_exposure import (
+    ANALYSIS_ID as TEMPORAL_ANALYSIS_ID,
+    FrequencyConsistency,
+    TemporalComputation,
+    TemporalExposureError,
+    TemporalExposureResult,
+    compute_temporal_exposure,
+    run_temporal_exposure,
+)
+
+__all__ += [
+    "TEMPORAL_ANALYSIS_ID", "FrequencyConsistency", "TemporalComputation",
+    "TemporalExposureError", "TemporalExposureResult", "compute_temporal_exposure",
+    "run_temporal_exposure",
+]

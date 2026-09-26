@@ -263,3 +263,22 @@ interpretation based on the documented GeoJSON endpoint and previously observed
 field semantics, severity, accessibility, disruption, completeness, temporal
 alignment, or official CRS claim is made. See
 `docs/EXPLORATORY_FLOOD_EXPOSURE.md`.
+
+## Phase 4B exploratory temporal observation
+
+Completed offline on **2026-09-27 UTC** under policy
+`exploratory_non_authoritative`:
+
+- All 112,073 features contained binary integer fields `y_2011` through
+  `y_2024`; missing/invalid count was zero.
+- The structural expression `freq == sum(y_2011..y_2024)` matched all 112,073
+  features, with zero mismatches. This is observed snapshot structure, not an
+  official field definition.
+- Annual intersection aggregation counted each infrastructure record at most
+  once per year. The union reconciled with Phase 4A at 4,919 road segments and
+  18 healthcare candidates.
+- The temporal-output verifier completed with zero issues.
+
+No yearly field, `freq`, road category, or healthcare field was assigned a
+provider meaning. No severity, disruption, risk, accessibility, completeness,
+or official CRS claim is made. See `docs/EXPLORATORY_TEMPORAL_EXPOSURE.md`.
