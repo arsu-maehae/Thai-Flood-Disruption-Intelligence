@@ -25,6 +25,7 @@ from .infrastructure_outputs import (
     InfrastructureVerificationResult,
     verify_infrastructure_output,
 )
+from .exposure_outputs import ExposureVerificationResult, verify_exposure_output
 
 __all__ = [
     "PageValidationResult",
@@ -46,4 +47,6 @@ __all__ = [
     "profile_validated_pages",
     "InfrastructureVerificationResult",
     "verify_infrastructure_output",
+    "ExposureVerificationResult",
+    "verify_exposure_output",
 ]

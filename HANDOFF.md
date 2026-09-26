@@ -123,9 +123,9 @@ The operating procedure is documented in `docs/INGESTION_OPERATIONS.md`.
 ## GitHub state
 
 - Branch: `main`
-- Implementation checkpoint before this documentation-only update: `f40dd41` (Phase 2D neutral deterministic transformation).
+- Published Phase 3 checkpoint: `b80c0be Complete Pattani infrastructure preparation`.
 - Repository: `arsu-maehae/Thai-Flood-Disruption-Intelligence`
-- At the start of this handoff update, local `main` and the local `origin/main` ref were synchronized at `f40dd41` on 2026-09-23; no network fetch was performed.
+- Before the Phase 4A local commit, local `main` and `origin/main` were synchronized at `b80c0be` on 2026-09-26.
 
 ## Completed operational readiness probe
 
@@ -214,7 +214,7 @@ Source verification completed with zero issues. Credential, lineage, containment
 
 ## Locally reported verification
 
-Latest locally recorded result: **1017 tests passed, 8 skipped**. The platform skips concern unavailable link behavior.
+Latest locally recorded result: **1027 tests passed, 8 skipped**. The platform skips concern unavailable link behavior.
 
 These are locally reported verification results, not external proof or evidence of official API behavior.
 
@@ -269,3 +269,21 @@ completeness, road accessibility, facility status, or positional accuracy. See
 - Do not stage or commit without a request.
 - Do not make network requests without explicit authorization.
 - Keep milestone reports concise: files changed, checks, Git status, blockers, and next action.
+
+## Phase 4A exploratory exposure
+
+Phase 4A completed offline on 2026-09-26 under policy
+`exploratory_non_authoritative`. Page-bounded spatial indexes and exact
+intersection checks compared 112,073 flood geometries with 32,358 road segments
+and 138 healthcare address-text candidates. Results were 4,919 exposed road
+segments and 18 exposed healthcare candidates; 27,439 road segments and 120
+healthcare candidates had no intersection. Normal-axis DGA candidates were
+consistent with Pattani for all 138 records; the swapped interpretation was
+consistent for zero.
+
+All input integrity checks passed, and the read-only exposure verifier reported
+zero issues. Generated output remains immutable and Git-ignored. The result is
+not a disruption or risk score and does not establish an official GISTDA or DGA
+CRS, temporal alignment, completeness, access, severity, or source-field
+semantics. Phase 4B requires a separate decision gate; see
+`docs/EXPLORATORY_FLOOD_EXPOSURE.md`.

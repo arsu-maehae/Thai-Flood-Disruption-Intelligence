@@ -242,3 +242,24 @@ Official OSM documentation provides coordinate-reference evidence for OSM, but
 the official GISTDA and DGA pages inspected did not establish explicit CRS
 contracts. Spatial overlay remains blocked; see
 `docs/SPATIAL_REFERENCE_CONTRACT.md`.
+
+## Phase 4A exploratory intersection observation
+
+Completed offline on **2026-09-26 UTC** under the project policy
+`exploratory_non_authoritative`:
+
+- 112,073 validated flood `MultiPolygon` features were compared with 32,358
+  road segments and 138 healthcare address-text candidates.
+- Geometric intersection alone marked 4,919 road segments exposed and 27,439
+  non-exposed; 18 healthcare candidates exposed and 120 non-exposed.
+- All 138 normal-axis DGA coordinate candidates were consistent with the
+  validated Pattani boundary, while zero swapped-axis candidates were. This is
+  observational consistency, not official CRS evidence.
+- Input validation and the read-only exposure verifier reported zero issues.
+
+For this run only, GISTDA geometry used a project RFC 7946 longitude/latitude
+interpretation based on the documented GeoJSON endpoint and previously observed
+`application/geo+json` responses. GISTDA did not explicitly state a CRS. No
+field semantics, severity, accessibility, disruption, completeness, temporal
+alignment, or official CRS claim is made. See
+`docs/EXPLORATORY_FLOOD_EXPOSURE.md`.
