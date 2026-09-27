@@ -1,0 +1,23 @@
+services:
+  postgis:
+    image: postgis/postgis:16-3.5
+    container_name: thai-flood-phase5-postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PHASE5_DB_NAME}
+      POSTGRES_USER: ${PHASE5_DB_USER}
+      POSTGRES_PASSWORD: ${PHASE5_DB_PASSWORD}
+    ports:
+      - "127.0.0.1:${PHASE5_DB_PORT:-55432}:5432"
+    volumes:
+      - pattani_phase5_postgis_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  pattani_phase5_postgis_data:
+    name: thai-flood-phase5-postgis-data

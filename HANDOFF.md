@@ -6,7 +6,7 @@ This document captures the project state reviewed on 2026-09-27. Recheck Git sta
 
 Thai Flood Disruption Intelligence aims to analyze flood exposure and infrastructure disruption in Thailand. Phase 1 ingestion and Phase 2 offline validation, profiling, and neutral transformation are complete for the Pattani GISTDA Historical Flood Recurrence source.
 
-PostGIS, infrastructure integration, geospatial transformation, disruption scoring, machine learning, APIs, dashboards, and production orchestration are future work.
+Raw-geometry PostGIS integration, disruption scoring, machine learning, public deployment, dashboards, and production orchestration remain future work. Phase 5 provides only a local aggregate PostGIS schema and read-only API; real database integration is still pending.
 
 ## Read first
 
@@ -214,7 +214,7 @@ Source verification completed with zero issues. Credential, lineage, containment
 
 ## Locally reported verification
 
-Latest locally recorded result: **1047 tests passed, 8 skipped**. The platform skips concern unavailable link behavior.
+Latest locally recorded result: **1053 tests passed, 8 skipped**. One dependency deprecation warning was reported by Starlette's test client. The platform skips concern unavailable link behavior.
 
 These are locally reported verification results, not external proof or evidence of official API behavior.
 
@@ -325,3 +325,33 @@ report does not establish disruption, risk, severity, accessibility,
 prediction, emergency-response value, completeness, field semantics, positional
 accuracy, temporal alignment, or snapshot consistency. Any operational product,
 scoring, or ranking requires a separately reviewed evidence and decision gate.
+
+## Phase 5 local aggregate data service
+
+Phase 5A–5B was implemented locally on 2026-09-27. Database schema version
+`1.0` stores only verified Phase 4 aggregate counts and provenance in five
+versioned relational tables. The loader reruns the read-only Phase 4 verifier,
+uses one transaction, reconciles inserted rows after publication, safely reuses
+identical immutable versions, and rejects content collisions.
+
+The local FastAPI exposes only `GET /health`, `GET /v1/metadata`,
+`GET /v1/exposure/summary`, `GET /v1/exposure/annual`, and
+`GET /v1/exposure/road-categories`. It has no application write route or
+permissive CORS configuration and accepts no file path or SQL from requests.
+
+The Docker client and Compose were installed, but the Docker daemon was
+unavailable during this milestone. No image, container, database credential file, database
+record, or volume was created, and SQLite was not substituted. Real PostGIS
+schema application, aggregate loading, reconciliation, and loopback API smoke
+testing remain the single local integration gate. See
+`docs/PHASE5_DATA_SERVICE.md`.
+
+The offline loader preflight reverified the real Phase 4C report and produced
+the expected safe snapshot: 2 headline rows, 28 ordered annual rows spanning
+2011–2024, 18 observed road-category rows, and frequency counts
+112,073/112,073/0/0. No database write occurred.
+
+The later infrastructure and Phase 2–4 generated data are not confirmed backed
+up. The attempted post-Phase-1 backup workflow was cancelled and must not be
+described as completed. The earlier verified Phase 1 flood-source backup remains
+a separate historical checkpoint.

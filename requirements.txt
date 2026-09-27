@@ -3,3 +3,7 @@ osmium==4.3.1
 pytest
 requests
 shapely==2.1.2
+fastapi==0.116.1
+httpx==0.28.1
+psycopg[binary]==3.2.9
+uvicorn==0.35.0

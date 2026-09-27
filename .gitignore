@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .env
+.env.phase5.local
 
 # Generated pipeline outputs, including metadata and run manifests, stay local.
 # Keep the tracked directory structure with .gitkeep files.

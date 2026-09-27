@@ -82,3 +82,15 @@ The report is not a disruption, risk, severity, accessibility, prediction,
 emergency-response, or completeness product. See
 [Verified Offline Pattani Exposure Report](docs/EXPLORATORY_EXPOSURE_REPORT.md)
 for provenance, hashes, aggregate results, and interpretation limits.
+
+## Local aggregate data service
+
+Phase 5 provides a versioned PostGIS schema and read-only FastAPI for the
+verified Phase 4 aggregates. It stores aggregates and provenance only—no raw
+identifiers, coordinates, geometry, properties, credentials, or response
+bodies. The API is intended for loopback use and describes its data as
+**exploratory geometric exposure aggregates**, not disruption or risk.
+
+See [Phase 5 Local Aggregate Data Service](docs/PHASE5_DATA_SERVICE.md) for the
+database tables, configuration, loader, endpoints, safe restart/stop commands,
+and scientific limitations.
