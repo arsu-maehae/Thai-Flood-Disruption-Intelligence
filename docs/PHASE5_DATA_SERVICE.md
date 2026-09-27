@@ -6,9 +6,8 @@ aggregates**. It stores no raw identifiers, coordinates, geometry, source
 properties, credentials, request headers, provider responses, or full provider
 links.
 
-Real PostGIS integration was not run during implementation because the Docker
-client and Compose were installed but the daemon was unavailable. The
-implementation and synthetic tests completed without substituting SQLite.
+Real PostGIS integration completed locally on 2026-09-27 using the verified
+Phase 4C report. No SQLite substitute was used.
 
 ## Architecture and data flow
 
@@ -39,7 +38,7 @@ only on `127.0.0.1` and uses the named volume
 `thai-flood-phase5-postgis-data`. Required variables are:
 
 - `PHASE5_DB_HOST=127.0.0.1`
-- `PHASE5_DB_PORT=55432`
+- `PHASE5_DB_PORT=<available loopback port>` (the default is `55432`)
 - `PHASE5_DB_NAME=pattani_exposure`
 - `PHASE5_DB_USER=pattani_app`
 - `PHASE5_DB_PASSWORD=<new strong local password>`
@@ -110,6 +109,38 @@ docker compose --env-file .env.phase5.local start postgis
 
 Do not use `docker compose down -v`, `docker volume rm`, or Docker prune
 commands for this project.
+
+## Verified local integration evidence
+
+The 2026-09-27 integration used Docker Engine `29.5.3`, Docker Desktop
+`4.78.0`, Docker Compose `5.1.4`, PostgreSQL `16.9`, and PostGIS `3.5`. The
+resolved image was `postgis/postgis:16-3.5` with image ID and repository digest
+`sha256:94146ac37bc61e2322f88016056c5920729cb8c64c8542ed590af8fc2abdac07`.
+The local binding was `127.0.0.1:54329`; the committed default `55432` fell in
+a Windows excluded port range on this host, so only the ignored local
+configuration was changed.
+
+Schema `1.0` loaded report
+`exploratory-exposure-report-v1-20260927-01` and reconciled one report-version
+row, two headline rows, 28 annual rows for 2011–2024, 18 road-category rows,
+and one frequency-consistency row. Frequency counts were
+`112073 / 112073 / 0 / 0`; road counts were `32358 / 4919 / 27439`, and
+healthcare counts were `138 / 18 / 120` for total/exposed/non-exposed.
+
+An identical second load reused the immutable version. A transactional
+same-ID/different-hash collision was rejected, mutation triggers rejected an
+update, and an intentionally invalid multi-statement transaction rolled back
+without leaving its synthetic parent record. Real-store in-process smoke tests
+passed for all five documented API endpoints, ordered results, safe missing and
+invalid report handling, absence of application write routes, absence of
+permissive CORS, and response secret safety.
+
+After verification the project container was stopped without deleting the
+named volume `thai-flood-phase5-postgis-data`. Restart it with:
+
+```powershell
+docker compose --env-file .env.phase5.local start postgis
+```
 
 ## Relational contract
 

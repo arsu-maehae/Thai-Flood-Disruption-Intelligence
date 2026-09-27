@@ -328,7 +328,8 @@ scoring, or ranking requires a separately reviewed evidence and decision gate.
 
 ## Phase 5 local aggregate data service
 
-Phase 5A–5B was implemented locally on 2026-09-27. Database schema version
+Phase 5A–5B was implemented and verified against real local PostGIS on
+2026-09-27. Database schema version
 `1.0` stores only verified Phase 4 aggregate counts and provenance in five
 versioned relational tables. The loader reruns the read-only Phase 4 verifier,
 uses one transaction, reconciles inserted rows after publication, safely reuses
@@ -339,17 +340,33 @@ The local FastAPI exposes only `GET /health`, `GET /v1/metadata`,
 `GET /v1/exposure/road-categories`. It has no application write route or
 permissive CORS configuration and accepts no file path or SQL from requests.
 
-The Docker client and Compose were installed, but the Docker daemon was
-unavailable during this milestone. No image, container, database credential file, database
-record, or volume was created, and SQLite was not substituted. Real PostGIS
-schema application, aggregate loading, reconciliation, and loopback API smoke
-testing remain the single local integration gate. See
+The verified stack was Docker Engine `29.5.3`, Docker Desktop `4.78.0`, Docker
+Compose `5.1.4`, PostgreSQL `16.9`, and PostGIS `3.5`. Image
+`postgis/postgis:16-3.5` resolved to image ID and repository digest
+`sha256:94146ac37bc61e2322f88016056c5920729cb8c64c8542ed590af8fc2abdac07`.
+The database was bound only to `127.0.0.1:54329`; the ignored local setting
+avoided a Windows excluded range containing the committed default port.
+
+Report `exploratory-exposure-report-v1-20260927-01` loaded atomically and
+reconciled one report-version row, two headline rows, 28 annual rows for
+2011–2024, 18 road-category rows, and one frequency row with
+`112073 / 112073 / 0 / 0`. Roads reconciled to `32358 / 4919 / 27439` and
+healthcare to `138 / 18 / 120` for total/exposed/non-exposed. Identical reload
+was safely reused; collision rejection, mutation triggers, and transactional
+rollback passed without changing the real record.
+
+All five documented endpoints passed in-process smoke testing against the real
+store, including deterministic ordering and safe invalid-report behavior. No
+application write route, permissive CORS, connection string, credential, raw
+ID, coordinate, or geometry was exposed. The project container was stopped
+after verification and the named volume `thai-flood-phase5-postgis-data` was
+preserved. Restart with
+`docker compose --env-file .env.phase5.local start postgis`. See
 `docs/PHASE5_DATA_SERVICE.md`.
 
-The offline loader preflight reverified the real Phase 4C report and produced
-the expected safe snapshot: 2 headline rows, 28 ordered annual rows spanning
-2011–2024, 18 observed road-category rows, and frequency counts
-112,073/112,073/0/0. No database write occurred.
+The loader reverified the real Phase 4C report before the database write. The
+service stores aggregate counts and provenance only; no raw feature, geometry,
+coordinate, property, provider response, or credential entered the database.
 
 The later infrastructure and Phase 2–4 generated data are not confirmed backed
 up. The attempted post-Phase-1 backup workflow was cancelled and must not be
