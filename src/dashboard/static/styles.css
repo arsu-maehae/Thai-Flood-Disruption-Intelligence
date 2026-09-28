@@ -50,7 +50,7 @@ button:disabled, select:disabled, input:disabled { cursor: not-allowed; opacity:
 .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
 figure { margin: 0; min-width: 0; }
 figcaption { margin-bottom: .75rem; font-weight: 800; }
-.bar-chart { min-height: 12rem; display: flex; align-items: end; gap: .35rem; border-bottom: 1px solid var(--line); padding: 1rem .25rem 0; }
+.bar-chart { height: clamp(10rem, 24vw, 14rem); display: flex; align-items: end; gap: .35rem; border-bottom: 1px solid var(--line); padding: 1rem .25rem 0; }
 .bar { flex: 1; min-width: .35rem; background: var(--teal); border-radius: .25rem .25rem 0 0; transition: opacity .2s, transform .2s; }
 .bar.dimmed { opacity: .25; }
 .bar.selected { background: var(--amber); transform: scaleX(1.1); }

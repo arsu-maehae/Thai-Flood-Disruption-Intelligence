@@ -123,7 +123,8 @@ function renderAnnual() {
     const chart = byId(`${kind}-chart`); chart.replaceChildren();
     for (const item of items) {
       const bar = element("span", undefined, "bar");
-      bar.style.height = `${Math.max(2, (item.exposed_count / maximum) * 100)}%`;
+      const height = item.exposed_count === 0 ? 0 : Math.max(2, (item.exposed_count / maximum) * 100);
+      bar.style.height = `${height}%`;
       bar.title = `${item.year}: ${formatted(item.exposed_count)}`;
       bar.setAttribute("aria-hidden", "true"); bar.dataset.year = String(item.year); chart.append(bar);
     }

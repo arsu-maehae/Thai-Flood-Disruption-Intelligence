@@ -73,6 +73,16 @@ def test_script_uses_safe_same_origin_contract_and_interactions(client: TestClie
     assert "invalid_response" in script and "could not be loaded" in script
 
 
+def test_annual_chart_has_a_definite_responsive_plot_height(client: TestClient) -> None:
+    styles = client.get("/dashboard/styles.css").text
+    chart_rule = next(rule for rule in styles.split("}") if ".bar-chart" in rule)
+    assert "height: clamp(10rem, 24vw, 14rem)" in chart_rule
+    assert "min-height" not in chart_rule
+    script = client.get("/dashboard/app.js").text
+    assert "item.exposed_count === 0 ? 0 : Math.max(2," in script
+    assert "(item.exposed_count / maximum) * 100" in script
+
+
 def test_unknown_assets_and_traversal_are_refused_with_safe_headers(client: TestClient) -> None:
     for path in ("/dashboard/missing.js", "/dashboard/%2e%2e/secret"):
         response = client.get(path)
