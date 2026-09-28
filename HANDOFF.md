@@ -372,3 +372,29 @@ The later infrastructure and Phase 2–4 generated data are not confirmed backed
 up. The attempted post-Phase-1 backup workflow was cancelled and must not be
 described as completed. The earlier verified Phase 1 flood-source backup remains
 a separate historical checkpoint.
+
+## Phase 6 local interactive dashboard
+
+Phase 6 adds a loopback-only, same-origin dashboard at `/dashboard/` backed by
+the five verified Phase 5 aggregate endpoints. It presents provenance,
+headline road-segment and healthcare address-text-candidate counts, separate
+2011–2024 annual views, observed road-category aggregates, and the
+version-bound frequency-consistency observation. Controls highlight one year,
+filter and sort categories, and restore the default view; every chart has an
+accessible table equivalent.
+
+The dashboard has no map, raw record, coordinate, feature identifier, source
+property, external asset, analytics, cookie, tracker, write request, or
+permissive CORS. Dashboard responses apply restrictive same-origin security
+headers and no-store caching. It remains an exploratory viewer and does not
+establish disruption, risk, severity, damage, accessibility, prediction,
+drivability, verified facility status, official CRS, or complete coverage. See
+`docs/PHASE6_DASHBOARD.md`.
+
+Real loopback verification on 2026-09-27 loaded the dashboard and all local
+assets against the preserved PostGIS report. Roads reconciled to
+`32358 / 4919 / 27439`, healthcare to `138 / 18 / 120`, with 14 ordered years,
+18 road categories, and the version-bound frequency observation
+`112073 / 112073 / 0 / 0`. Security headers, safe missing-asset behavior, and
+zero external dashboard dependencies passed. Browser automation exercised year
+selection, category filtering and sorting, and keyboard reset behavior.

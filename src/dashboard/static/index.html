@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pattani exploratory exposure dashboard</title>
+  <link rel="stylesheet" href="/dashboard/styles.css">
+  <script src="/dashboard/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to dashboard content</a>
+  <header class="site-header">
+    <div>
+      <p class="eyebrow">Thai Flood Disruption Intelligence · Pattani</p>
+      <h1>Exploratory exposure dashboard</h1>
+      <p class="lede">A local view of verified aggregate geometric intersections—not confirmed disruption, risk, damage, accessibility, prediction, or complete coverage.</p>
+    </div>
+    <div id="health-pill" class="health-pill" aria-label="Service status">Checking local service</div>
+  </header>
+
+  <div class="warning" role="note">
+    <strong>Interpret cautiously.</strong> Provider CRS remains unverified for GISTDA and DGA. Intersections are exploratory observations; road categories do not establish drivability, and healthcare rows are address-text candidates.
+  </div>
+
+  <main id="main-content">
+    <p id="status" class="status" role="status" aria-live="polite">Loading verified aggregates…</p>
+
+    <section aria-labelledby="provenance-title" class="panel provenance">
+      <div><p class="section-kicker">Version and provenance</p><h2 id="provenance-title">Report context</h2></div>
+      <dl id="metadata-list" class="metadata-list"></dl>
+    </section>
+
+    <section aria-labelledby="headline-title">
+      <p class="section-kicker">Observed snapshot</p>
+      <h2 id="headline-title">Headline exposure</h2>
+      <div id="headline-cards" class="card-grid"></div>
+    </section>
+
+    <section aria-labelledby="annual-title" class="panel">
+      <div class="section-heading">
+        <div><p class="section-kicker">2011–2024</p><h2 id="annual-title">Annual exposure observations</h2></div>
+        <label for="year-select">Highlight year<select id="year-select" disabled></select></label>
+      </div>
+      <p class="context-note">Annual values are separate observations. They must not be summed and described as unique infrastructure totals. A zero value in 2018 is not proof that no flood occurred.</p>
+      <div class="chart-grid">
+        <figure>
+          <figcaption>Road segments</figcaption>
+          <div id="roads-chart" class="bar-chart" role="img" aria-label="Annual exposed road-segment counts"></div>
+          <div id="roads-table"></div>
+        </figure>
+        <figure>
+          <figcaption>Healthcare address-text candidates</figcaption>
+          <div id="healthcare-chart" class="bar-chart" role="img" aria-label="Annual exposed healthcare-candidate counts"></div>
+          <div id="healthcare-table"></div>
+        </figure>
+      </div>
+    </section>
+
+    <section aria-labelledby="category-title" class="panel">
+      <div class="section-heading">
+        <div><p class="section-kicker">Observed OSM labels</p><h2 id="category-title">Road categories</h2></div>
+        <div class="controls">
+          <label for="category-filter">Filter categories<input id="category-filter" type="search" autocomplete="off" disabled></label>
+          <label for="category-sort">Sort<select id="category-sort" disabled><option value="exposed-desc">Exposed: high to low</option><option value="name-asc">Category: A to Z</option><option value="percentage-desc">Percentage: high to low</option></select></label>
+          <button id="reset-controls" type="button" disabled>Restore default view</button>
+        </div>
+      </div>
+      <p class="context-note">Categories are observed source labels and do not establish road condition, access, importance, or drivability.</p>
+      <div id="category-table"></div>
+    </section>
+
+    <section aria-labelledby="frequency-title" class="panel">
+      <p class="section-kicker">Structural observation</p>
+      <h2 id="frequency-title">Frequency consistency</h2>
+      <p id="frequency-observation">Loading report context…</p>
+    </section>
+
+    <section aria-labelledby="limits-title" class="panel limits">
+      <p class="section-kicker">Use boundary</p>
+      <h2 id="limits-title">What this dashboard cannot establish</h2>
+      <ul>
+        <li>It does not prove operational disruption, severity, risk, damage, accessibility, prediction, or exhaustive coverage.</li>
+        <li>It does not resolve official GISTDA or DGA CRS, positional accuracy, source completeness, or snapshot consistency.</li>
+        <li>Road counts describe clipped segments, not unique roads. Healthcare counts describe address-text candidates, not verified facilities.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>Local, same-origin aggregate viewer. No map, analytics, cookies, trackers, or external assets.</footer>
+</body>
+</html>

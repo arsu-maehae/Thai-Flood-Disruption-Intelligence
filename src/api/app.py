@@ -6,9 +6,10 @@ from collections.abc import Callable, Generator
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict
 
+from src.dashboard import STATIC_DIRECTORY
 from src.database.exposure_store import ExposureStore, StoreError
 
 
@@ -107,6 +108,34 @@ def create_app(provider: Callable[[], ExposureStore] | None = None) -> FastAPI:
                      "It is not disruption, risk, severity, accessibility, prediction, damage, "
                      "or complete coverage."),
     )
+
+    @application.middleware("http")
+    async def dashboard_security_headers(request: Request, call_next: Callable):
+        response = await call_next(request)
+        if request.url.path.startswith("/dashboard"):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'none'; script-src 'self'; style-src 'self'; "
+                "connect-src 'self'; img-src 'self' data:; font-src 'none'; "
+                "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+            )
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+        return response
+
+    @application.get("/dashboard/", include_in_schema=False)
+    def dashboard() -> FileResponse:
+        return FileResponse(STATIC_DIRECTORY / "index.html", media_type="text/html")
+
+    @application.get("/dashboard/styles.css", include_in_schema=False)
+    def dashboard_styles() -> FileResponse:
+        return FileResponse(STATIC_DIRECTORY / "styles.css", media_type="text/css")
+
+    @application.get("/dashboard/app.js", include_in_schema=False)
+    def dashboard_script() -> FileResponse:
+        return FileResponse(STATIC_DIRECTORY / "app.js", media_type="text/javascript")
 
     @application.exception_handler(StoreError)
     async def safe_store_error(_: Request, error: StoreError) -> JSONResponse:

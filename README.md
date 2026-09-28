@@ -94,3 +94,12 @@ bodies. The API is intended for loopback use and describes its data as
 See [Phase 5 Local Aggregate Data Service](docs/PHASE5_DATA_SERVICE.md) for the
 database tables, configuration, loader, endpoints, safe restart/stop commands,
 and scientific limitations.
+
+## Local interactive dashboard
+
+Phase 6 provides a responsive, accessible, same-origin dashboard at
+`/dashboard/` using the local read-only aggregate service. It uses browser-native
+HTML, CSS, and JavaScript with no map, external assets, analytics, cookies, or
+trackers. See [Phase 6 Local Interactive Exposure Dashboard](docs/PHASE6_DASHBOARD.md)
+for start/stop commands, security controls, interactions, and interpretation
+limits.
