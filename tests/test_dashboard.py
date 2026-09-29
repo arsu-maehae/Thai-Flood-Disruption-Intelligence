@@ -55,7 +55,9 @@ def test_dashboard_assets_are_local_safe_and_typed(client: TestClient) -> None:
 def test_html_is_semantic_accessible_and_caveated(client: TestClient) -> None:
     html = client.get("/dashboard/").text
     for token in ("<main", "<h1", "<h2", 'aria-live="polite"', 'id="roads-table"', "Skip to dashboard content",
-                  "Healthcare address-text candidates", "Road segments", "not proof that no flood occurred"):
+                  "Healthcare address-text candidates", "Road segments", "not proof that no flood occurred",
+                  'id="exposure-map"', "Exploratory and non-authoritative",
+                  "Display subsetâ€”not prevalence", "authoritative aggregate remains 15.2% exposed"):
         assert token in html
     prohibited = ("disruption score", "risk score", "all roads are drivable", "complete provider coverage")
     assert all(token not in html.casefold() for token in prohibited)
@@ -71,6 +73,7 @@ def test_script_uses_safe_same_origin_contract_and_interactions(client: TestClie
     assert "innerHTML" not in script and "localStorage" not in script and "sessionStorage" not in script
     assert all(value in script for value in ("year-select", "category-filter", "category-sort", "reset-controls"))
     assert "invalid_response" in script and "could not be loaded" in script
+    assert "/v1/spatial/infrastructure" in script and "ResizeObserver" in script
 
 
 def test_annual_chart_has_a_definite_responsive_plot_height(client: TestClient) -> None:

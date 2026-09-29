@@ -398,3 +398,21 @@ assets against the preserved PostGIS report. Roads reconciled to
 `112073 / 112073 / 0 / 0`. Security headers, safe missing-asset behavior, and
 zero external dashboard dependencies passed. Browser automation exercised year
 selection, category filtering and sorting, and keyboard reset behavior.
+
+## Phase 7 local exploratory spatial map
+
+Phase 7 extends `/dashboard/` with a verified, bounded Canvas map and adds the
+read-only `GET /v1/spatial/infrastructure` route. The payload is built only from
+the immutable Phase 3 road/healthcare outputs and Phase 4A exposure lineage. It
+contains all 4,919 exposed road segments, a bounded deterministic subset of
+5,081 of 27,439 non-exposed segments, and all 138 healthcare candidates
+(18 exposed). The subset is not representative and visual proportions must not
+be interpreted as prevalence; the authoritative aggregate remains 15.2%.
+The fixed payload caps are 10,000 roads, 500 healthcare candidates, and 8 MiB.
+
+No flood polygon, source identifier, property collection, source link, internal
+path, or database detail is exposed. The map uses no external tiles or assets.
+Feature-level annual masks were not persisted, so the existing year control
+remains an aggregate chart/table highlight and does not filter map geometry.
+Positions retain the project’s exploratory RFC 7946 interpretation; this is not
+an official provider CRS determination. See `docs/PHASE7_SPATIAL_MAP.md`.

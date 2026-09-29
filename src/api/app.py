@@ -6,11 +6,12 @@ from collections.abc import Callable, Generator
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict
 
 from src.dashboard import STATIC_DIRECTORY
 from src.database.exposure_store import ExposureStore, StoreError
+from src.api.spatial import SpatialPayloadError, SpatialPayloadStore
 
 
 SERVICE_SCOPE = "exploratory geometric exposure aggregates"
@@ -94,12 +95,22 @@ def _default_provider() -> ExposureStore:
     return ExposureStore.from_environment()
 
 
-def create_app(provider: Callable[[], ExposureStore] | None = None) -> FastAPI:
+def _default_spatial_provider() -> SpatialPayloadStore:
+    project_root = STATIC_DIRECTORY.parents[2]
+    return SpatialPayloadStore(project_root / "data/processed", project_root / "data/raw")
+
+
+def create_app(provider: Callable[[], ExposureStore] | None = None,
+               spatial_provider: Callable[[], SpatialPayloadStore] | None = None) -> FastAPI:
     """Create an API with an injected store provider; no connection occurs here."""
     selected_provider = provider or _default_provider
+    selected_spatial_provider = spatial_provider or _default_spatial_provider
 
     def repository() -> Generator[ExposureStore, None, None]:
         yield selected_provider()
+
+    def spatial_repository() -> Generator[SpatialPayloadStore, None, None]:
+        yield selected_spatial_provider()
 
     application = FastAPI(
         title="Pattani Exploratory Exposure Aggregates",
@@ -137,9 +148,18 @@ def create_app(provider: Callable[[], ExposureStore] | None = None) -> FastAPI:
     def dashboard_script() -> FileResponse:
         return FileResponse(STATIC_DIRECTORY / "app.js", media_type="text/javascript")
 
+    @application.get("/favicon.ico", include_in_schema=False)
+    def empty_favicon() -> Response:
+        return Response(status_code=204)
+
     @application.exception_handler(StoreError)
     async def safe_store_error(_: Request, error: StoreError) -> JSONResponse:
         status = 503 if error.category in {"database_failure", "database_unavailable"} else 404
+        return JSONResponse(status_code=status, content={"detail": error.category})
+
+    @application.exception_handler(SpatialPayloadError)
+    async def safe_spatial_error(_: Request, error: SpatialPayloadError) -> JSONResponse:
+        status = 404 if error.category == "invalid_report" else 503
         return JSONResponse(status_code=status, content={"detail": error.category})
 
     @application.get("/health", response_model=HealthResponse)
@@ -179,6 +199,17 @@ def create_app(provider: Callable[[], ExposureStore] | None = None) -> FastAPI:
                 "count_meaning": "road segments with at least one geometric intersection in the observed snapshot",
                 "caveats": [REPORT_CAVEAT],
                 "items": list(store.road_categories(selected))}
+
+    @application.get("/v1/spatial/infrastructure", response_model=None)
+    def spatial_infrastructure(
+        request: Request,
+        report_id: ReportId = None,
+        spatial: SpatialPayloadStore = Depends(spatial_repository),
+    ) -> dict[str, object]:
+        pairs = request.query_params.multi_items()
+        if report_id is None or any(key != "report_id" for key, _ in pairs) or len(pairs) != 1:
+            raise SpatialPayloadError("invalid_report")
+        return spatial.payload(report_id)
 
     return application
 

@@ -7,8 +7,9 @@ const endpoints = Object.freeze({
   summary: "/v1/exposure/summary",
   annual: "/v1/exposure/annual",
   categories: "/v1/exposure/road-categories",
+  spatial: "/v1/spatial/infrastructure",
 });
-const state = { annual: [], categories: [], selectedYear: null };
+const state = { annual: [], categories: [], selectedYear: null, map: null, mapView: { zoom: 1, x: 0, y: 0 } };
 const byId = (id) => document.getElementById(id);
 const integer = (value) => Number.isSafeInteger(value) && value >= 0;
 const safeText = (value) => typeof value === "string" && value.length > 0 && value.length <= 1000;
@@ -70,6 +71,76 @@ function validateCategories(value) {
     if (!safeText(item.road_category) || !integer(item.total_count) || !integer(item.exposed_count) || item.exposed_count > item.total_count) throw new Error("invalid_response");
   }
   return items;
+}
+function validateMap(value) {
+  const payload = requireObject(value);
+  const roads = requireObject(payload.roads); const healthcare = requireObject(payload.healthcare);
+  const roadMetadata = requireObject(roads.metadata);
+  const population = requireObject(roadMetadata.population_counts);
+  const displayed = requireObject(roadMetadata.displayed_counts);
+  if (payload.report_id !== VERIFIED_REPORT || payload.policy_label !== "exploratory_non_authoritative") throw new Error("invalid_response");
+  if (!Array.isArray(payload.extent) || payload.extent.length !== 4 || !payload.extent.every(Number.isFinite)) throw new Error("invalid_response");
+  if (!Array.isArray(roads.features) || !Array.isArray(healthcare.features)) throw new Error("invalid_response");
+  if (![population.total, population.exposed, population.non_exposed, displayed.total, displayed.exposed, displayed.non_exposed].every(integer)) throw new Error("invalid_response");
+  if (population.total !== population.exposed + population.non_exposed || displayed.total !== displayed.exposed + displayed.non_exposed || displayed.total !== roads.features.length) throw new Error("invalid_response");
+  if (roadMetadata.deterministic_selection_policy !== "all_exposed_then_evenly_spaced_non_exposed_context" || roadMetadata.representative_sample !== false || roadMetadata.prevalence_inference_allowed !== false) throw new Error("invalid_response");
+  if (!integer(healthcare.total_count) || !integer(healthcare.returned_count) || healthcare.returned_count !== healthcare.features.length) throw new Error("invalid_response");
+  if (roads.features.length > 10000 || healthcare.features.length > 500) throw new Error("invalid_response");
+  for (const feature of [...roads.features, ...healthcare.features]) {
+    requireObject(feature); requireObject(feature.geometry);
+    if (typeof feature.exposed !== "boolean" || !["LineString", "MultiLineString", "Point"].includes(feature.geometry.type)) throw new Error("invalid_response");
+  }
+  return payload;
+}
+
+function coordinateLines(geometry) {
+  if (geometry.type === "LineString") return [geometry.coordinates];
+  if (geometry.type === "MultiLineString") return geometry.coordinates;
+  return [];
+}
+function renderMap() {
+  if (!state.map) return;
+  const canvas = byId("exposure-map"); const box = canvas.getBoundingClientRect();
+  const ratio = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = Math.max(1, Math.round(box.width * ratio)); canvas.height = Math.max(1, Math.round(box.height * ratio));
+  const context = canvas.getContext("2d"); context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, box.width, box.height); context.fillStyle = "#eaf1ed"; context.fillRect(0, 0, box.width, box.height);
+  const [left, bottom, right, top] = state.map.extent; const padding = 18;
+  const base = Math.min((box.width - padding * 2) / (right - left), (box.height - padding * 2) / (top - bottom));
+  const scale = base * state.mapView.zoom; const centerX = (left + right) / 2; const centerY = (bottom + top) / 2;
+  const project = (pair) => [box.width / 2 + (pair[0] - centerX) * scale + state.mapView.x,
+    box.height / 2 - (pair[1] - centerY) * scale + state.mapView.y];
+  const roads = state.map.roads.features.slice().sort((a, b) => Number(a.exposed) - Number(b.exposed));
+  for (const road of roads) {
+    context.beginPath();
+    for (const line of coordinateLines(road.geometry)) {
+      line.forEach((pair, index) => { const point = project(pair); if (index === 0) context.moveTo(...point); else context.lineTo(...point); });
+    }
+    context.strokeStyle = road.exposed ? "#c4472d" : "rgba(70, 94, 95, .42)";
+    context.lineWidth = road.exposed ? 1.35 : .55; context.stroke();
+  }
+  for (const item of state.map.healthcare.features) {
+    const point = project(item.geometry.coordinates); context.beginPath(); context.arc(point[0], point[1], item.exposed ? 4 : 2.8, 0, Math.PI * 2);
+    context.fillStyle = item.exposed ? "#f4b942" : "#087f76"; context.fill();
+    context.strokeStyle = "#fff"; context.lineWidth = 1; context.stroke();
+  }
+}
+function changeMapView(zoomFactor, x, y) {
+  state.mapView.zoom = Math.min(8, Math.max(1, state.mapView.zoom * zoomFactor)); state.mapView.x += x; state.mapView.y += y; renderMap();
+}
+function resetMap() { state.mapView = { zoom: 1, x: 0, y: 0 }; renderMap(); }
+async function loadMap(reportId) {
+  try {
+    state.map = validateMap(await getJson(`${endpoints.spatial}?report_id=${encodeURIComponent(reportId)}`));
+    renderMap();
+    const roads = state.map.roads; const health = state.map.healthcare;
+    const population = roads.metadata.population_counts; const displayed = roads.metadata.displayed_counts;
+    byId("map-status").textContent = `All-years/ever-exposed map: displaying ${formatted(displayed.total)} of ${formatted(population.total)} road segmentsâ€”all ${formatted(displayed.exposed)} exposed roads and a bounded deterministic subset of ${formatted(displayed.non_exposed)} of ${formatted(population.non_exposed)} non-exposed roadsâ€”plus all ${formatted(health.returned_count)} healthcare candidates. Visual proportions are not prevalence; the authoritative aggregate is 15.2% exposed.`;
+    for (const id of ["map-zoom-in", "map-zoom-out", "map-reset"]) byId(id).disabled = false;
+  } catch (_) {
+    byId("map-status").textContent = "The verified spatial view is unavailable. Aggregate charts and tables remain usable.";
+    byId("map-status").classList.add("error");
+  }
 }
 function renderMetadata(metadata) {
   const list = byId("metadata-list");
@@ -182,13 +253,28 @@ async function loadDashboard() {
     renderAnnual(); renderCategories();
     for (const id of ["year-select", "category-filter", "category-sort", "reset-controls"]) byId(id).disabled = false;
     byId("status").textContent = "Verified aggregate view loaded.";
+    await loadMap(metadata.report_id);
   } catch (_) {
     byId("health-pill").textContent = "Local service unavailable";
     byId("status").textContent = "The aggregate view could not be loaded. Check the local service and try again.";
     byId("status").classList.add("error");
   }
 }
-byId("year-select").addEventListener("change", (event) => { state.selectedYear = event.target.value === "" ? null : Number(event.target.value); highlightYear(); });
+byId("year-select").addEventListener("change", (event) => {
+  state.selectedYear = event.target.value === "" ? null : Number(event.target.value); highlightYear();
+  byId("map-year-note").textContent = state.selectedYear === null
+    ? "This is an all-years/ever-exposed map. Feature-level annual masks were not persisted, so year selection applies to the charts and tables only and never reclassifies or filters map features."
+    : `${state.selectedYear} is highlighted in the charts and tables only. The map remains the unchanged all-years/ever-exposed view; it does not represent ${state.selectedYear}.`;
+});
+byId("map-zoom-in").addEventListener("click", () => changeMapView(1.35, 0, 0));
+byId("map-zoom-out").addEventListener("click", () => changeMapView(1 / 1.35, 0, 0));
+byId("map-reset").addEventListener("click", resetMap);
+byId("exposure-map").addEventListener("keydown", (event) => {
+  const actions = { ArrowLeft: [1, 28, 0], ArrowRight: [1, -28, 0], ArrowUp: [1, 0, 28], ArrowDown: [1, 0, -28], "+": [1.35, 0, 0], "=": [1.35, 0, 0], "-": [1 / 1.35, 0, 0] };
+  if (event.key === "Home") { event.preventDefault(); resetMap(); return; }
+  if (actions[event.key]) { event.preventDefault(); changeMapView(...actions[event.key]); }
+});
+new ResizeObserver(renderMap).observe(byId("exposure-map"));
 byId("category-filter").addEventListener("input", renderCategories);
 byId("category-sort").addEventListener("change", renderCategories);
 byId("reset-controls").addEventListener("click", () => {

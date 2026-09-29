@@ -103,3 +103,11 @@ HTML, CSS, and JavaScript with no map, external assets, analytics, cookies, or
 trackers. See [Phase 6 Local Interactive Exposure Dashboard](docs/PHASE6_DASHBOARD.md)
 for start/stop commands, security controls, interactions, and interpretation
 limits.
+
+Phase 7 extends the same local dashboard with a bounded browser-native Canvas
+map sourced only from verified generated outputs. It sends all exposed road
+segments, a bounded deterministic non-representative subset of non-exposed road
+context, and all healthcare candidates; visual proportions are not prevalence;
+it sends no flood polygons, source identifiers, external tiles, or provider
+properties. See [Phase 7 Local Exploratory Spatial Map](docs/PHASE7_SPATIAL_MAP.md)
+for the route, limits, controls, commands, and non-authoritative interpretation.

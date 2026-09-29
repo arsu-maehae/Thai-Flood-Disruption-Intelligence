@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pattani exploratory exposure dashboard</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/dashboard/styles.css">
   <script src="/dashboard/app.js" defer></script>
 </head>
@@ -34,6 +35,30 @@
       <p class="section-kicker">Observed snapshot</p>
       <h2 id="headline-title">Headline exposure</h2>
       <div id="headline-cards" class="card-grid"></div>
+    </section>
+
+    <section aria-labelledby="map-title" class="panel map-panel">
+      <div class="section-heading">
+        <div><p class="section-kicker">All-years / ever-exposed Â· bounded spatial view</p><h2 id="map-title">Exploratory infrastructure map</h2></div>
+        <div class="map-controls" aria-label="Map controls">
+          <button id="map-zoom-in" type="button" disabled aria-label="Zoom map in">+</button>
+          <button id="map-zoom-out" type="button" disabled aria-label="Zoom map out">âˆ’</button>
+          <button id="map-reset" type="button" disabled>Reset map</button>
+        </div>
+      </div>
+      <p class="map-warning"><strong>Exploratory and non-authoritative.</strong> Positions use the reviewed RFC 7946 interpretation; provider CRS remains unverified. This is not disruption, risk, damage, accessibility, or complete coverage.</p>
+      <p class="map-disclosure"><strong>Display subsetâ€”not prevalence.</strong> All 4,919 ever-exposed road segments are displayed, but non-exposed roads are a bounded deterministic subset (5,081 of 27,439). Visual proportions must not be interpreted as exposure prevalence. The authoritative aggregate remains 15.2% exposed.</p>
+      <p id="map-status" class="context-note" role="status" aria-live="polite">Loading verified bounded mapâ€¦</p>
+      <div class="map-frame">
+        <canvas id="exposure-map" tabindex="0" role="img" aria-label="Exploratory map of exposed and non-exposed road segments and healthcare address-text candidates. Use arrow keys to pan, plus and minus to zoom, and Home to reset."></canvas>
+      </div>
+      <div class="map-legend" aria-label="Map legend">
+        <span><i class="legend-line road-exposed"></i>Exposed road segment</span>
+        <span><i class="legend-line road-other"></i>Non-exposed road context</span>
+        <span><i class="legend-point health-exposed"></i>Exposed healthcare candidate</span>
+        <span><i class="legend-point health-other"></i>Non-exposed healthcare candidate</span>
+      </div>
+      <p id="map-year-note" class="context-note">This is an all-years/ever-exposed map. Feature-level annual masks were not persisted, so year selection applies to the charts and tables only and never reclassifies or filters map features.</p>
     </section>
 
     <section aria-labelledby="annual-title" class="panel">
@@ -86,6 +111,6 @@
     </section>
   </main>
 
-  <footer>Local, same-origin aggregate viewer. No map, analytics, cookies, trackers, or external assets.</footer>
+  <footer>Local, same-origin exploratory viewer. No external tiles, analytics, cookies, trackers, or external assets.</footer>
 </body>
 </html>
