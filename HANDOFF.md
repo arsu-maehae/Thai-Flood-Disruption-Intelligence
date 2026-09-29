@@ -416,3 +416,18 @@ Feature-level annual masks were not persisted, so the existing year control
 remains an aggregate chart/table highlight and does not filter map geometry.
 Positions retain the project’s exploratory RFC 7946 interpretation; this is not
 an official provider CRS determination. See `docs/PHASE7_SPATIAL_MAP.md`.
+
+## Phase 8 data science portfolio case study
+
+Phase 8 prepares the completed Pattani work for recruiter review without adding
+new data, infrastructure, APIs, prediction, or machine learning. The executed
+notebook `notebooks/pattani_flood_exposure_eda.ipynb` reads only verified Phase
+4 aggregate outputs, checks their manifest hashes, embeds compact results, and
+publishes five deterministic static charts under `docs/assets/portfolio/`.
+
+`docs/PORTFOLIO_CASE_STUDY.md` presents the problem, methods, findings,
+responsible interpretation, reproducibility, and three resume-ready bullets.
+The README now opens with the project question, scale, method, three verified
+findings, technology stack, dashboard location, run instructions, and key
+limitations. Phase 8 remains an uncommitted review change until separately
+approved.

@@ -1,18 +1,65 @@
-# Thai Flood Disruption Intelligence - Pattani
+# Thai Flood Disruption Intelligence — Pattani
 
-Phase one focuses exclusively on ingesting GISTDA historical flood data for Pattani, Thailand.
+An end-to-end geospatial data science case study asking: **where do observed
+historical flood geometries intersect Pattani roads and healthcare location
+candidates?** The result is an exploratory, reproducible analysis—not a claim
+of confirmed disruption, damage, accessibility, prediction, risk, or complete
+coverage.
 
-## Scope
+![Pattani exposure headline](docs/assets/portfolio/headline_exposure.png)
 
-This phase will provide the foundation for a reliable flood-data pipeline:
+## Portfolio snapshot
 
-- Download GISTDA historical flood responses using only verified request behavior.
-- Preserve credential-sanitized source artifacts immutably in `data/raw/`; existing artifacts must never be overwritten.
-- Validate officially documented behavior separately from structure observed in prior API tests.
-- Derive processed data reproducibly from identified sanitized source artifacts in `data/processed/`.
-- Add focused tests for ingestion, validation, and transformation.
+- **Scale:** 112,073 historical flood features, 32,358 road segments, and 138
+  healthcare address-text candidates.
+- **Method:** credential-safe immutable ingestion, structural validation,
+  deterministic transformation, exact geometric intersections, temporal
+  aggregation, PostGIS publication, and an accessible local dashboard.
+- **Finding 1:** 4,919 road segments had an observed intersection—**15.2%** of
+  the reviewed road-segment snapshot.
+- **Finding 2:** 18 healthcare candidates had an observed intersection—**13.0%**
+  of the candidate records.
+- **Finding 3:** 2017 had the maximum observed annual counts: **4,042 road
+  segments** and **15 healthcare candidates**.
 
-Machine learning, dashboards, databases, population, roads, hospitals, schools, and derived features are out of scope for this phase.
+Read the [portfolio case study](docs/PORTFOLIO_CASE_STUDY.md) or open the
+[executed analysis notebook](notebooks/pattani_flood_exposure_eda.ipynb).
+The interactive local dashboard is served at `http://127.0.0.1:8000/dashboard/`
+using the commands in [Phase 7 Spatial Map](docs/PHASE7_SPATIAL_MAP.md).
+
+## Technology
+
+Python · requests · PyOsmium · Shapely · Matplotlib · PostgreSQL/PostGIS ·
+FastAPI · Docker Compose · browser-native HTML/CSS/JavaScript/Canvas · pytest
+
+## Run locally
+
+```text
+python -m venv venv
+python -m pip install -r requirements.txt
+pytest -q
+```
+
+The notebook and static portfolio charts use verified repository-relative
+aggregates and require no live API or database. The dashboard requires the
+preserved local PostGIS volume; follow `docs/PHASE7_SPATIAL_MAP.md` and bind
+services only to loopback.
+
+## Interpretation limits
+
+Road records are clipped segments, not unique roads. Healthcare records are
+address-text candidates, not verified facilities. Official GISTDA and DGA CRS,
+field meanings, positional accuracy, completeness, ordering, and snapshot
+consistency remain unresolved. Annual counts may overlap and must not be summed
+as unique infrastructure totals. The map’s non-exposed road context is a
+non-representative deterministic subset, so visual proportions are not
+prevalence.
+
+## Project evolution
+
+The repository progressed from a secure Phase 1 flood-ingestion foundation to
+validated infrastructure integration, exploratory spatial and temporal
+analysis, immutable aggregate publication, and a local analytical dashboard.
 
 ## Project Structure
 
